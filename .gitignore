@@ -1,0 +1,42 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# --- Conda / virtual environments ----------------------------------------
+# The environment itself is rebuilt with carc/env_setup.sh; never commit it.
+.conda/
+conda-env/
+envs/
+.venv/
+venv/
+
+# --- Model weights --------------------------------------------------------
+# Real checkpoints are only used for quality checks and are far too large for git.
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+models/
+checkpoints/
+hf_cache/
+
+# --- Large temporary files ------------------------------------------------
+# Nsight Systems / Nsight Compute reports (often hundreds of MB).
+*.nsys-rep
+*.qdrep
+*.ncu-rep
+*.sqlite
+# Scratch space, core dumps, generic temp files.
+tmp/
+scratch/
+*.tmp
+core
+core.*
+
+# --- OS / editor ----------------------------------------------------------
+.DS_Store
+.idea/
