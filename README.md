@@ -1,0 +1,5 @@
+# INT4 Kernel Study
+
+This project is a single-GPU study of INT4 weight-only (W4A16) matrix-multiply kernels for LLM decoding. During decode, each linear layer multiplies a small batch of activations by a large weight matrix, so performance is limited mostly by how fast weights can be read from memory. Storing weights in 4 bits instead of 16 should therefore cut latency by up to about 4x. Using the linear-layer shapes of Llama-3-8B across a range of batch sizes and quantization group sizes, we benchmark existing kernels (Marlin, BitBLAS, TorchAO) and our own Triton and CUDA kernels against a cuBLAS FP16 baseline on an NVIDIA A100-80GB. We check every kernel against a shared FP32 reference and explain the results with roofline and Nsight Compute analysis. The goal is a correct, well-explained comparison, not a kernel that beats the state of the art.
+
+See `CLAUDE.md` for the full project rules, and `config/workloads.yaml` for all workload parameters.

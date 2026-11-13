@@ -1,0 +1,40 @@
+# Single source of truth for every number used in the study.
+# Never hard-code shapes, batch sizes, group sizes, run counts or the seed elsewhere;
+# load them through common/config.py instead.
+
+# Llama-3-8B linear layers. Weight matrix is K x N (input features -> output features).
+layers:
+  attn_qkv: { K: 4096,  N: 6144 }
+  attn_out: { K: 4096,  N: 4096 }
+  mlp_up:   { K: 4096,  N: 28672 }   # gate + up projections fused
+  mlp_down: { K: 14336, N: 4096 }
+
+# Batch sizes (M = number of tokens in the decode step).
+batch_sizes:
+  full:  [1, 2, 4, 8, 16, 32, 64, 128, 256]
+  early: [1, 16, 64]
+
+# Quantization group sizes along K (one scale/zero per group).
+group_sizes:
+  full:  [32, 64, 128]
+  early: [128]
+
+# INT4 quantization scheme used for every implementation (see common/quantize.py):
+#   asymmetric: per-group scale + integer zero point, w = (q - z) * s
+#   symmetric:  per-group scale only, zero point fixed at 8, w = (q - 8) * s
+# Not chosen yet: we pick the scheme every library accepts once each one is
+# wired up. Until then, callers must pass scheme= explicitly.
+quant_scheme: null
+
+# Timing (see common/harness.py once it exists).
+runs:
+  warmup: 25     # untimed iterations before measuring
+  timed: 100     # timed iterations; report the median
+
+# Harness buffers (see common/harness.py).
+harness:
+  l2_flush_mb: 256        # zeroed before every timed run; must be >= 2x the GPU's L2 (A100: 40 MB)
+  peak_bw_copy_mb: 1024   # size of the device-to-device copy used to measure peak HBM bandwidth
+
+# Fixed seed for random FP16 weights/activations used in speed tests.
+seed: 1234
