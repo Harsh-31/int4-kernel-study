@@ -10,6 +10,11 @@
 # Creating the environment only installs packages; it does no GPU work, so it
 # can run on the login node. Torch will report no GPU there, which is expected.
 #
+# Both modes check that `python` is the environment's own interpreter and fail
+# loudly if not. When sourced from a batch script (non-interactive shell), a
+# failure EXITS the job, so nothing runs with the wrong Python. In an
+# interactive shell it only returns an error, so your terminal stays open.
+#
 # Options (environment variables; set any of them before running/sourcing to override):
 #   INT4_ENV_PREFIX  full path of the environment
 #                    (default: /project2/prasanna_933/hsharma9/int4-env).
@@ -18,12 +23,14 @@
 #                    environment (INT4_ENV) in conda's default location instead.
 #   INT4_ENV         environment name, only used when INT4_ENV_PREFIX is empty
 #                    (default: int4-study)
-#   PYTHON_VERSION   Python for a NEW environment (default: 3.12, the version of
-#                    the environment that passed the GPU check). Ignored if
-#                    the environment already exists.
+#   PYTHON_VERSION   Python for a NEW environment (default: 3.11, the version of
+#                    the existing int4-env). Ignored if the environment exists.
 #   PIP_CACHE_DIR    pip download cache   (default: /scratch1/hsharma9/cache/pip)
 #   CONDA_PKGS_DIRS  conda package cache  (default: /scratch1/hsharma9/cache/conda_pkgs)
 #   HF_HOME          Hugging Face cache for model weights (default: /scratch1/hsharma9/hf_cache)
+#   OPENBLAS_NUM_THREADS, OMP_NUM_THREADS, MKL_NUM_THREADS
+#                    CPU threads for numpy/torch math libraries (default: 1 each).
+#                    Job scripts can raise them to $SLURM_CPUS_PER_TASK.
 #
 # The caches go on /scratch1 so multi-GB downloads (PyTorch/vLLM wheels, model
 # weights) neither fill the home quota nor get re-downloaded on every install.
@@ -41,11 +48,25 @@
 # which selects the named-environment mode below.
 export INT4_ENV_PREFIX="${INT4_ENV_PREFIX-/project2/prasanna_933/hsharma9/int4-env}"
 INT4_ENV="${INT4_ENV:-int4-study}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-/scratch1/hsharma9/cache/pip}"
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-/scratch1/hsharma9/cache/conda_pkgs}"
 export HF_HOME="${HF_HOME:-/scratch1/hsharma9/hf_cache}"
 mkdir -p "$PIP_CACHE_DIR" "$CONDA_PKGS_DIRS" "$HF_HOME"
+
+# CPU thread pools. OpenBLAS (loaded by numpy), OpenMP and MKL each start one
+# thread per core by default: 64 on a CARC node. Login nodes cap the number of
+# threads/processes per user, so importing numpy there fails to create its
+# threads and Python crashes. One thread each is plenty for installing and
+# checking versions; GPU benchmarks barely use the CPU math libraries.
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+
+# Ignore ~/.local/lib/pythonX.Y/site-packages. Python adds that folder to the
+# import path automatically, so a `pip install --user torch` from some other
+# session would silently shadow the environment's own torch.
+export PYTHONNOUSERSITE=1
 
 if [[ -n "${INT4_ENV_PREFIX:-}" ]]; then
     CONDA_TARGET=(-p "$INT4_ENV_PREFIX")
@@ -64,6 +85,15 @@ fi
 #   cccl   CUB/Thrust/libcu++ headers, used by many CUDA kernels
 CUDA_EXTRAS="nvcc,nvvm,crt,cudart,cccl"
 
+env_fail() {
+    # Print an error. In a non-interactive shell (Slurm job, `bash` script)
+    # exit immediately; in an interactive shell just return 1 so the user's
+    # terminal is not closed. Callers write `env_fail "..." || return 1`.
+    echo "[env] ERROR: $*" >&2
+    [[ $- == *i* ]] || exit 1
+    return 1
+}
+
 load_modules() {
     module load conda/25.11.0 || return 1
     # nvcc needs a host C++ compiler. gcc 13 is supported by CUDA 13.0 and new
@@ -72,6 +102,49 @@ load_modules() {
     module load gcc/13.3.0 || echo "[env] warning: gcc/13.3.0 not loaded; using system gcc" >&2
     # Make `conda activate` work in non-interactive shells (Slurm jobs).
     eval "$(conda shell.bash hook)"
+}
+
+activate_env() {
+    # sbatch copies the submitting shell's environment into the job. If an
+    # environment was already active there, `conda activate` of the same
+    # environment is treated as a re-activation and does not move its bin/
+    # back to the front of PATH, even though `module load` just put other
+    # bin/ folders (with their own python) ahead of it. Deactivating
+    # everything first makes this a clean activation every time.
+    local i
+    for i in 1 2 3 4 5; do
+        [[ "${CONDA_SHLVL:-0}" -gt 0 ]] || break
+        conda deactivate
+    done
+    conda activate "${CONDA_TARGET[1]}" || return 1
+    hash -r   # forget any python path bash cached before activation
+}
+
+check_python() {
+    # Verify `python` is the environment's own interpreter, and show where it is.
+    local expected_prefix py sys_prefix
+    if [[ -n "${INT4_ENV_PREFIX:-}" ]]; then
+        expected_prefix="$INT4_ENV_PREFIX"
+    else
+        expected_prefix="${CONDA_PREFIX:-}"
+        if [[ "$(basename "$expected_prefix")" != "$INT4_ENV" ]]; then
+            echo "[env] CONDA_PREFIX='$expected_prefix' is not the '$INT4_ENV' environment" >&2
+            return 1
+        fi
+    fi
+    # `|| true`: under a caller's `set -e`, a failure here must still reach the
+    # diagnostic message below instead of silently exiting.
+    py="$(command -v python)" || true
+    sys_prefix="$(python -c 'import sys; print(sys.prefix)' 2>/dev/null)" || true
+    echo "[env] which python:   $py"
+    echo "[env] python version: $(python --version 2>&1)"
+    echo "[env] sys.prefix:     $sys_prefix"
+    if [[ -z "$py" || "$(realpath "$py")" != "$(realpath "$expected_prefix/bin/python")" \
+          || "$(realpath "$sys_prefix")" != "$(realpath "$expected_prefix")" ]]; then
+        echo "[env] expected the interpreter of $expected_prefix; every python on PATH:" >&2
+        type -a python >&2 || echo "  (none)" >&2
+        return 1
+    fi
 }
 
 cuda_root() {
@@ -114,7 +187,7 @@ print_versions() {
 import sys
 from importlib.metadata import PackageNotFoundError, version
 
-print(f"python            {sys.version.split()[0]}")
+print(f"python            {sys.version.split()[0]}  ({sys.executable})")
 for pkg in ("torch", "triton", "vllm", "bitblas", "torchao", "cuda-toolkit",
             "nvidia-cuda-nvcc", "pyyaml", "pytest"):
     try:
@@ -129,11 +202,13 @@ EOF
 
 # ---------------------------------------------------------------- source mode
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
-    load_modules || { echo "[env] module load failed" >&2; return 1; }
-    conda activate "${CONDA_TARGET[1]}" || { echo "[env] cannot activate $ENV_LABEL; create it with: bash carc/env_setup.sh" >&2; return 1; }
+    load_modules || { env_fail "module load failed" || return 1; }
+    activate_env || { env_fail "cannot activate $ENV_LABEL; create it with: bash carc/env_setup.sh" || return 1; }
+    check_python || { env_fail "python is not the interpreter of $ENV_LABEL (see above)" || return 1; }
     setup_cuda_home
-    echo "[env] activated $ENV_LABEL ($(python --version))"
+    echo "[env] activated $ENV_LABEL"
     echo "[env] CUDA_HOME=${CUDA_HOME:-unset} ($(nvcc --version 2>/dev/null | grep -o 'release [0-9.]*' || echo 'nvcc not found'))"
+    echo "[env] threads: OPENBLAS=$OPENBLAS_NUM_THREADS OMP=$OMP_NUM_THREADS MKL=$MKL_NUM_THREADS"
     echo "[env] PIP_CACHE_DIR=$PIP_CACHE_DIR CONDA_PKGS_DIRS=$CONDA_PKGS_DIRS HF_HOME=$HF_HOME"
     return 0
 fi
@@ -152,7 +227,9 @@ else
     [[ -n "${INT4_ENV_PREFIX:-}" ]] && mkdir -p "$(dirname "$INT4_ENV_PREFIX")"
     conda create -y "${CONDA_TARGET[@]}" "python=$PYTHON_VERSION"
 fi
-conda activate "${CONDA_TARGET[1]}"
+activate_env
+# Must pass BEFORE installing anything, or pip would install into the wrong Python.
+check_python || env_fail "python is not the interpreter of $ENV_LABEL (see above)"
 python -m pip install --upgrade pip
 
 # 1. vLLM first. vLLM pins an exact PyTorch (and Triton) version; installing it
@@ -188,9 +265,7 @@ for req in requires("torch") or []:
 EOF
 )"
 if [[ -z "$CUDA_TOOLKIT_VERSION" ]]; then
-    echo "[env] ERROR: installed torch does not declare a cuda-toolkit==X dependency;" >&2
-    echo "[env] cannot pick a matching nvcc automatically" >&2
-    exit 1
+    env_fail "installed torch does not declare a cuda-toolkit==X dependency; cannot pick a matching nvcc automatically"
 fi
 echo "[env] installing cuda-toolkit[$CUDA_EXTRAS]==$CUDA_TOOLKIT_VERSION (matches torch)"
 python -m pip install -c "$CONSTRAINTS" "cuda-toolkit[$CUDA_EXTRAS]==$CUDA_TOOLKIT_VERSION"

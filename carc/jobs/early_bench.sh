@@ -34,6 +34,13 @@ set -eo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONUNBUFFERED=1   # print progress to the log as it happens
 
+# env_setup.sh defaults the CPU math libraries to 1 thread (for login nodes).
+# Here we own SLURM_CPUS_PER_TASK cores, so use them: the random weights are
+# generated on the CPU before being moved to the GPU.
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
+export MKL_NUM_THREADS="$OMP_NUM_THREADS"
+
 echo "=== job $SLURM_JOB_ID on $(hostname) at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
 source carc/env_setup.sh
 
