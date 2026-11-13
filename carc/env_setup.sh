@@ -18,19 +18,30 @@
 #                    environment (INT4_ENV) in conda's default location instead.
 #   INT4_ENV         environment name, only used when INT4_ENV_PREFIX is empty
 #                    (default: int4-study)
-#   PYTHON_VERSION   Python for a new environment (default: 3.11)
+#   PYTHON_VERSION   Python for a NEW environment (default: 3.12, the version of
+#                    the environment that passed the GPU check). Ignored if
+#                    the environment already exists.
 #   PIP_CACHE_DIR    pip download cache   (default: /scratch1/hsharma9/cache/pip)
 #   CONDA_PKGS_DIRS  conda package cache  (default: /scratch1/hsharma9/cache/conda_pkgs)
 #   HF_HOME          Hugging Face cache for model weights (default: /scratch1/hsharma9/hf_cache)
 #
 # The caches go on /scratch1 so multi-GB downloads (PyTorch/vLLM wheels, model
 # weights) neither fill the home quota nor get re-downloaded on every install.
+#
+# CUDA toolkit
+# ------------
+# We do NOT load a CARC cuda module. The CUDA compiler (nvcc) comes from pip,
+# at exactly the CUDA version PyTorch was built with (PyTorch declares it as a
+# `cuda-toolkit==X` dependency). Those wheels install into
+# site-packages/nvidia/cu<major>/{bin,include,lib}, which is used as CUDA_HOME.
+# A CARC module would give a different CUDA version than PyTorch's, and kernels
+# we compile (our CUDA kernel, BitBLAS) must match the runtime torch loads.
 
 # "${VAR-default}" (no colon) keeps an explicitly empty INT4_ENV_PREFIX empty,
 # which selects the named-environment mode below.
 export INT4_ENV_PREFIX="${INT4_ENV_PREFIX-/project2/prasanna_933/hsharma9/int4-env}"
 INT4_ENV="${INT4_ENV:-int4-study}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-/scratch1/hsharma9/cache/pip}"
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-/scratch1/hsharma9/cache/conda_pkgs}"
 export HF_HOME="${HF_HOME:-/scratch1/hsharma9/hf_cache}"
@@ -44,16 +55,47 @@ else
     ENV_LABEL="$INT4_ENV"
 fi
 
+# CUDA extras installed alongside PyTorch's own CUDA libraries:
+#   nvcc   the compiler driver, ptxas, nvlink, fatbinary
+#   nvvm   cicc + libnvvm: the device-code compiler nvcc calls internally
+#          (nvcc alone cannot compile a kernel without it)
+#   crt    nvcc's built-in headers (crt/host_config.h, ...)
+#   cudart CUDA runtime headers and library (cuda_runtime.h, libcudart)
+#   cccl   CUB/Thrust/libcu++ headers, used by many CUDA kernels
+CUDA_EXTRAS="nvcc,nvvm,crt,cudart,cccl"
+
 load_modules() {
     module load conda/25.11.0 || return 1
-    # cuda/12.6.3 depends on gcc/13.3.0 in some module trees; if loading it
-    # directly fails, load the compiler first and retry.
-    if ! module load cuda/12.6.3 2>/dev/null; then
-        echo "[env] cuda/12.6.3 not found directly; loading gcc/13.3.0 first"
-        module load gcc/13.3.0 && module load cuda/12.6.3 || return 1
-    fi
+    # nvcc needs a host C++ compiler. gcc 13 is supported by CUDA 13.0 and new
+    # enough for PyTorch's C++17 headers; the OS gcc may be older. Not fatal:
+    # without it, nvcc falls back to the system gcc.
+    module load gcc/13.3.0 || echo "[env] warning: gcc/13.3.0 not loaded; using system gcc" >&2
     # Make `conda activate` work in non-interactive shells (Slurm jobs).
     eval "$(conda shell.bash hook)"
+}
+
+cuda_root() {
+    # site-packages/nvidia/cu<major> for the CUDA major version torch was built with.
+    python - <<'EOF'
+import sysconfig
+import torch
+major = (torch.version.cuda or "").split(".")[0]
+print(f"{sysconfig.get_paths()['purelib']}/nvidia/cu{major}" if major else "")
+EOF
+}
+
+setup_cuda_home() {
+    # Point CUDA_HOME/PATH at the pip-installed toolkit. CUDA_HOME is what
+    # torch.utils.cpp_extension and most build scripts use to find nvcc and
+    # the CUDA headers.
+    local root
+    root="$(cuda_root)" || return 1
+    if [[ -n "$root" && -x "$root/bin/nvcc" ]]; then
+        export CUDA_HOME="$root"
+        export PATH="$root/bin:$PATH"
+    else
+        echo "[env] warning: no pip-installed nvcc at '$root/bin/nvcc'; rerun: bash carc/env_setup.sh" >&2
+    fi
 }
 
 env_exists() {
@@ -72,15 +114,16 @@ print_versions() {
 import sys
 from importlib.metadata import PackageNotFoundError, version
 
-print(f"python        {sys.version.split()[0]}")
-for pkg in ("torch", "triton", "vllm", "bitblas", "torchao", "pyyaml", "pytest"):
+print(f"python            {sys.version.split()[0]}")
+for pkg in ("torch", "triton", "vllm", "bitblas", "torchao", "cuda-toolkit",
+            "nvidia-cuda-nvcc", "pyyaml", "pytest"):
     try:
-        print(f"{pkg:13s} {version(pkg)}")
+        print(f"{pkg:17s} {version(pkg)}")
     except PackageNotFoundError:
-        print(f"{pkg:13s} NOT INSTALLED")
+        print(f"{pkg:17s} NOT INSTALLED")
 
 import torch
-print(f"torch CUDA    {torch.version.cuda}   (GPU visible here: {torch.cuda.is_available()})")
+print(f"torch CUDA        {torch.version.cuda}   (GPU visible here: {torch.cuda.is_available()})")
 EOF
 }
 
@@ -88,7 +131,9 @@ EOF
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
     load_modules || { echo "[env] module load failed" >&2; return 1; }
     conda activate "${CONDA_TARGET[1]}" || { echo "[env] cannot activate $ENV_LABEL; create it with: bash carc/env_setup.sh" >&2; return 1; }
+    setup_cuda_home
     echo "[env] activated $ENV_LABEL ($(python --version))"
+    echo "[env] CUDA_HOME=${CUDA_HOME:-unset} ($(nvcc --version 2>/dev/null | grep -o 'release [0-9.]*' || echo 'nvcc not found'))"
     echo "[env] PIP_CACHE_DIR=$PIP_CACHE_DIR CONDA_PKGS_DIRS=$CONDA_PKGS_DIRS HF_HOME=$HF_HOME"
     return 0
 fi
@@ -101,7 +146,7 @@ set -eo pipefail
 load_modules
 
 if env_exists; then
-    echo "[env] $ENV_LABEL already exists; installing into it"
+    echo "[env] $ENV_LABEL already exists; installing into it (its Python version is kept)"
 else
     echo "[env] creating $ENV_LABEL with Python $PYTHON_VERSION"
     [[ -n "${INT4_ENV_PREFIX:-}" ]] && mkdir -p "$(dirname "$INT4_ENV_PREFIX")"
@@ -128,6 +173,41 @@ cat "$CONSTRAINTS"
 # 3. The rest. pyyaml loads config/workloads.yaml; pytest runs tests/.
 python -m pip install -c "$CONSTRAINTS" triton bitblas torchao pyyaml pytest
 
+# 4. CUDA compiler matching PyTorch. Read the exact cuda-toolkit version torch
+#    depends on (e.g. torch 2.11.0+cu130 requires cuda-toolkit==13.0.2) and
+#    install the compiler extras of that same version, so nvcc, its headers and
+#    the runtime libraries torch already uses all come from one CUDA release.
+CUDA_TOOLKIT_VERSION="$(python - <<'EOF'
+import re
+from importlib.metadata import requires
+for req in requires("torch") or []:
+    m = re.match(r"cuda-toolkit(\[[^\]]*\])?\s*==\s*([0-9.]+)", req)
+    if m:
+        print(m.group(2))
+        break
+EOF
+)"
+if [[ -z "$CUDA_TOOLKIT_VERSION" ]]; then
+    echo "[env] ERROR: installed torch does not declare a cuda-toolkit==X dependency;" >&2
+    echo "[env] cannot pick a matching nvcc automatically" >&2
+    exit 1
+fi
+echo "[env] installing cuda-toolkit[$CUDA_EXTRAS]==$CUDA_TOOLKIT_VERSION (matches torch)"
+python -m pip install -c "$CONSTRAINTS" "cuda-toolkit[$CUDA_EXTRAS]==$CUDA_TOOLKIT_VERSION"
+
 echo
 echo "[env] installed versions in $ENV_LABEL:"
 print_versions
+
+echo
+setup_cuda_home
+echo "[env] CUDA_HOME=$CUDA_HOME"
+echo "[env] nvcc --version:"
+nvcc --version
+TORCH_CUDA="$(python -c 'import torch; print(torch.version.cuda)')"
+NVCC_CUDA="$(nvcc --version | grep -o 'release [0-9.]*' | awk '{print $2}')"
+if [[ "$TORCH_CUDA" == "$NVCC_CUDA" ]]; then
+    echo "[env] OK: nvcc CUDA $NVCC_CUDA matches torch CUDA $TORCH_CUDA"
+else
+    echo "[env] WARNING: nvcc CUDA $NVCC_CUDA does not match torch CUDA $TORCH_CUDA" >&2
+fi
