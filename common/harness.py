@@ -195,12 +195,17 @@ def discover_impls() -> dict:
     """Every package in impls/ that exposes prepare() and run().
 
     BASELINE_IMPL is placed first so its latency is known before the others
-    need it for speedup_vs_fp16.
+    need it for speedup_vs_fp16. An implementation whose library is not
+    installed (ImportError, e.g. no vllm on a laptop) is skipped with a note.
     """
     import impls
     found = {}
     for info in pkgutil.iter_modules(impls.__path__):
-        mod = importlib.import_module(f"impls.{info.name}")
+        try:
+            mod = importlib.import_module(f"impls.{info.name}")
+        except ImportError as e:
+            print(f"[harness] skipping impls/{info.name}: {e}")
+            continue
         if callable(getattr(mod, "prepare", None)) and callable(getattr(mod, "run", None)):
             found[info.name] = mod
     return dict(sorted(found.items(), key=lambda kv: kv[0] != BASELINE_IMPL))

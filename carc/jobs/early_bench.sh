@@ -1,10 +1,14 @@
 #!/bin/bash
-# Early benchmark: GPU tests, then cuBLAS FP16 on the early sweep.
+# Early benchmark: GPU tests, then the selected implementations on the early sweep.
 #
 # Submit from the repo root (Slurm resolves the relative --output path and
 # $SLURM_SUBMIT_DIR from where sbatch is called):
 #
-#   sbatch carc/jobs/early_bench.sh
+#   sbatch carc/jobs/early_bench.sh                        # cublas marlin (default)
+#   INT4_IMPLS="cublas" sbatch carc/jobs/early_bench.sh    # choose implementations
+#
+# INT4_IMPLS is a space-separated list of folder names in impls/. Keep cublas
+# in it: speedup_vs_fp16 is computed against cuBLAS and is empty without it.
 #
 # The log goes to results/early_bench_<jobid>.log.
 #
@@ -54,8 +58,11 @@ echo "=== tests (GPU tests run here; they are skipped on machines without a GPU)
 python -m pytest tests -v -rs
 
 echo
-echo "=== early benchmark: cuBLAS FP16, symmetric scheme ==="
-python run_benchmark.py --early --scheme symmetric --impls cublas
+# Split the space-separated list into an array, so each name is passed to
+# --impls as its own argument.
+read -r -a IMPLS <<< "${INT4_IMPLS:-cublas marlin}"
+echo "=== early benchmark: ${IMPLS[*]}, symmetric scheme ==="
+python run_benchmark.py --early --scheme symmetric --impls "${IMPLS[@]}"
 
 echo
 echo "=== done at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
