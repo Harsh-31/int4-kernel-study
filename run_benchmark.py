@@ -1,12 +1,14 @@
 """Run the INT4 kernel benchmark (on a GPU node, through a Slurm job in carc/jobs/).
 
-    python run_benchmark.py --early --scheme symmetric
-    python run_benchmark.py --impls cublas marlin --scheme symmetric
+    python run_benchmark.py --early
+    python run_benchmark.py --impls cublas cublas_bf16 marlin torchao
 
 For every group size, layer and implementation: quantize random weights, call
-prepare() once (untimed), then for every batch size check correctness and,
-only if it passes, time run() with common/harness.py. Each result is appended
-to a CSV in results/ as soon as it is measured.
+prepare() once (untimed), then for every batch size prepare the input
+(prepare_input(), e.g. a BF16 copy; untimed), check correctness against cuBLAS
+in the implementation's own compute dtype and, only if it passes, time run()
+with common/harness.py. Each result is appended to a CSV in results/ as soon as
+it is measured.
 
 All shapes, batch sizes, group sizes and run counts come from
 config/workloads.yaml.
@@ -22,17 +24,22 @@ from common.config import batch_sizes, group_sizes, load_config, quant_scheme
 from common.correctness import check
 from common.harness import (
     BASELINE_IMPL,
+    BF16_BASELINE_IMPL,
     EXCLUDED_IMPLS,
     append_row,
     bandwidth_gbs,
     bytes_moved,
+    compute_dtype,
     default_csv_path,
     discover_impls,
     make_l2_flush_buffer,
     measure_latency_us,
     measure_peak_bandwidth,
+    prepare_input,
     reference_weights,
 )
+
+DTYPE_NAMES = {torch.float16: "float16", torch.bfloat16: "bfloat16"}
 from common.quantize import random_activations, random_quantized_weights
 
 
@@ -40,8 +47,9 @@ def benchmark(impls: dict, sweep: str = "full", scheme: str | None = None,
               out_csv: Path | None = None) -> Path:
     """Benchmark every implementation on every (group size, layer, batch size).
 
-    `impls` maps a name to an object with prepare()/run(); put BASELINE_IMPL
-    first so speedups can be computed. `sweep` is "full" or "early".
+    `impls` maps a name to an object with prepare()/run(); put the baselines
+    (cublas, cublas_bf16) first so speedups can be computed. `sweep` is "full"
+    or "early".
     Returns the CSV path.
     """
     if not torch.cuda.is_available():
@@ -69,7 +77,8 @@ def benchmark(impls: dict, sweep: str = "full", scheme: str | None = None,
             for layer, shape in cfg["layers"].items():
                 K, N = shape["K"], shape["N"]
                 qw = random_quantized_weights(K, N, G, scheme, device="cuda")
-                fp16_latency = {}   # M -> cuBLAS latency for this layer and G
+                # M -> baseline latency for this layer and G
+                base_latency = {BASELINE_IMPL: {}, BF16_BASELINE_IMPL: {}}
 
                 for name, impl in impls.items():
                     # One-time setup (repacking etc.), outside all timing.
@@ -80,38 +89,46 @@ def benchmark(impls: dict, sweep: str = "full", scheme: str | None = None,
                         continue
                     w_ref = reference_weights(name, impl, qw)
                     bits = getattr(impl, "WEIGHT_BITS", 4)
+                    dtype = compute_dtype(impl)
 
                     for M in batch_sizes(sweep):
                         x = random_activations(M, K, device="cuda")
+                        # Input in the form run() expects (e.g. BF16), made
+                        # OUTSIDE the timed region so casts are not timed.
+                        x_in = prepare_input(impl, x)
                         row = dict(impl=name, layer=layer, K=K, N=N, M=M, group_size=G,
                                    latency_us="", bandwidth_gbs="", pct_peak="",
-                                   speedup_vs_fp16="", gpu=gpu, timestamp=timestamp)
+                                   speedup_vs_fp16="", speedup_vs_bf16="",
+                                   compute_dtype=DTYPE_NAMES[dtype], gpu=gpu, timestamp=timestamp)
 
-                        # 1. Correctness first: never report a speed for a wrong result.
-                        result = check(impl.run(x), x, w_ref)
+                        # 1. Correctness first, against cuBLAS in the same dtype:
+                        #    never report a speed for a wrong result.
+                        result = check(impl.run(x_in), x, w_ref, dtype)
                         row["correct"] = result.passed
                         if not result.passed:
                             print(f"[bench] FAIL {name:12s} {layer:9s} M={M:<4d} G={G:<4d} "
-                                  f"impl {result.impl} vs fp16 {result.baseline}")
+                                  f"impl {result.impl} vs cuBLAS {DTYPE_NAMES[dtype]} {result.baseline}")
                             append_row(out_csv, row)
                             continue
 
                         # 2. Timing (warm-up, L2 flush, CUDA events, median).
-                        lat = measure_latency_us(lambda: impl.run(x), flush_buf)
+                        lat = measure_latency_us(lambda: impl.run(x_in), flush_buf)
                         bw = bandwidth_gbs(bytes_moved(K, N, M, G, bits, scheme), lat)
-                        if name == BASELINE_IMPL:
-                            fp16_latency[M] = lat
+                        if name in base_latency:
+                            base_latency[name][M] = lat
+                        fp16_lat = base_latency[BASELINE_IMPL].get(M)
+                        bf16_lat = base_latency[BF16_BASELINE_IMPL].get(M)
                         row.update(
                             latency_us=round(lat, 3),
                             bandwidth_gbs=round(bw, 1),
                             pct_peak=round(100.0 * bw / peak, 1),
-                            speedup_vs_fp16=(round(fp16_latency[M] / lat, 3)
-                                             if M in fp16_latency else ""),
+                            speedup_vs_fp16=round(fp16_lat / lat, 3) if fp16_lat else "",
+                            speedup_vs_bf16=round(bf16_lat / lat, 3) if bf16_lat else "",
                         )
                         append_row(out_csv, row)
                         print(f"[bench] {name:12s} {layer:9s} M={M:<4d} G={G:<4d} "
                               f"{lat:9.2f} us {bw:8.1f} GB/s {row['pct_peak']:5}% peak "
-                              f"speedup {row['speedup_vs_fp16']}")
+                              f"speedup fp16 {row['speedup_vs_fp16']} bf16 {row['speedup_vs_bf16']}")
 
                     w_ref = None   # free before the next implementation's prepare()
                 del qw
@@ -145,8 +162,9 @@ def main() -> None:
             parser.error(f"not found or not implemented in impls/: {sorted(missing)}; "
                          f"available: {sorted(impls)}")
         impls = {k: v for k, v in impls.items() if k in args.impls}   # keeps baseline first
-    if BASELINE_IMPL not in impls:
-        print(f"[bench] note: {BASELINE_IMPL} not selected, speedup_vs_fp16 will be empty")
+    for base, col in ((BASELINE_IMPL, "speedup_vs_fp16"), (BF16_BASELINE_IMPL, "speedup_vs_bf16")):
+        if base not in impls:
+            print(f"[bench] note: {base} not selected, {col} will be empty")
 
     out = benchmark(impls, sweep="early" if args.early else "full",
                     scheme=args.scheme, out_csv=args.out)

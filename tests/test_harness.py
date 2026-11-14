@@ -5,6 +5,7 @@ small dummy implementations and needs a GPU (run via Slurm).
 """
 
 import csv
+import types
 
 import pytest
 import torch
@@ -12,13 +13,17 @@ import torch
 from common.config import group_sizes, load_config
 from common.harness import (
     BASELINE_IMPL,
+    BASELINE_IMPLS,
+    BF16_BASELINE_IMPL,
     CSV_COLUMNS,
     append_row,
     bandwidth_gbs,
     bytes_moved,
+    compute_dtype,
     default_csv_path,
     discover_impls,
     median_us,
+    prepare_input,
 )
 from common.quantize import dequantize
 from run_benchmark import benchmark
@@ -84,23 +89,39 @@ def test_default_csv_path_is_filesystem_safe():
     assert ":" not in p.name and " " not in p.name and p.suffix == ".csv"
 
 
-def test_discover_impls_puts_baseline_first():
+def test_discover_impls_puts_baselines_first_in_order():
     names = list(discover_impls())
-    if BASELINE_IMPL in names:
-        assert names[0] == BASELINE_IMPL
+    present = [b for b in BASELINE_IMPLS if b in names]
+    assert names[:len(present)] == present
+    assert BASELINE_IMPLS == (BASELINE_IMPL, BF16_BASELINE_IMPL)
+
+
+def test_compute_dtype_and_prepare_input_defaults():
+    plain = types.SimpleNamespace()                          # declares nothing
+    x = torch.zeros(2, 4, dtype=torch.float16)
+    assert compute_dtype(plain) == torch.float16
+    assert prepare_input(plain, x) is x
+    bf16 = types.SimpleNamespace(COMPUTE_DTYPE=torch.bfloat16,
+                                 prepare_input=lambda t: t.to(torch.bfloat16))
+    assert compute_dtype(bf16) == torch.bfloat16
+    assert prepare_input(bf16, x).dtype == torch.bfloat16
 
 
 # ------------------------------------------------------------- GPU end-to-end
 
 class _DequantMatmul:
-    """Dummy implementation: dequantize in prepare(), FP16 matmul in run()."""
+    """Dummy implementation: dequantize in prepare(), matmul in `dtype` in run()."""
 
-    def __init__(self, weight_bits=4, corrupt=False):
+    def __init__(self, weight_bits=4, corrupt=False, dtype=torch.float16):
         self.WEIGHT_BITS = weight_bits
+        self.COMPUTE_DTYPE = dtype
         self.corrupt = corrupt
 
     def prepare(self, weights, scales, zeros, group_size):
-        self.w = dequantize(weights, scales, zeros, group_size, torch.float16)
+        self.w = dequantize(weights, scales, zeros, group_size, self.COMPUTE_DTYPE)
+
+    def prepare_input(self, x):
+        return x.to(self.COMPUTE_DTYPE).contiguous()
 
     def run(self, x):
         y = x @ self.w
@@ -115,23 +136,32 @@ def test_sweep_end_to_end(tmp_path):
     out = tmp_path / "r.csv"
     impls = {
         BASELINE_IMPL: _DequantMatmul(weight_bits=16),
+        BF16_BASELINE_IMPL: _DequantMatmul(weight_bits=16, dtype=torch.bfloat16),
         "dummy": _DequantMatmul(),
+        "dummy_bf16": _DequantMatmul(dtype=torch.bfloat16),
         "broken": _DequantMatmul(corrupt=True),
     }
     benchmark(impls, sweep="early", scheme="symmetric", out_csv=out)
     with open(out) as f:
         rows = list(csv.DictReader(f))
 
+    assert list(rows[0]) == CSV_COLUMNS
     n = len(group_sizes("early")) * len(load_config()["layers"]) * len(load_config()["batch_sizes"]["early"])
-    assert len(rows) == 3 * n
+    assert len(rows) == len(impls) * n
     for r in rows:
         if r["impl"] == "broken":
             assert r["correct"] == "False" and r["latency_us"] == ""
-        else:
-            assert r["correct"] == "True" and float(r["latency_us"]) > 0
-            assert float(r["speedup_vs_fp16"]) > 0
+            continue
+        assert r["correct"] == "True" and float(r["latency_us"]) > 0
+        assert float(r["speedup_vs_fp16"]) > 0
+        # cublas runs before cublas_bf16 exists, so its bf16 speedup is empty.
+        if r["impl"] != BASELINE_IMPL:
+            assert float(r["speedup_vs_bf16"]) > 0
+        assert r["compute_dtype"] == ("bfloat16" if "bf16" in r["impl"] else "float16")
         if r["impl"] == BASELINE_IMPL:
             assert float(r["speedup_vs_fp16"]) == 1.0
+        if r["impl"] == BF16_BASELINE_IMPL:
+            assert float(r["speedup_vs_bf16"]) == 1.0
 
 
 # ------------------------------------------------------------- excluded impls

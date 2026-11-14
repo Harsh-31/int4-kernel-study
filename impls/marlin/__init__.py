@@ -46,6 +46,7 @@ from common.quantize import SYMMETRIC_ZERO, dequantize
 
 NUM_BITS = 4
 MARLIN_TILE = 16
+COMPUTE_DTYPE = torch.float16   # FP16 activations/output, FP32 accumulation
 # Column interleave marlin_zero_points() applies to 4-bit zero points
 # (hard-coded inside that function in marlin_utils.py; needed to invert it).
 ZP_INTERLEAVE_4BIT = numpy.array([0, 2, 4, 6, 1, 3, 5, 7])

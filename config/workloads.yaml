@@ -22,9 +22,9 @@ group_sizes:
 # INT4 quantization scheme used for every implementation (see common/quantize.py):
 #   asymmetric: per-group scale + integer zero point, w = (q - z) * s
 #   symmetric:  per-group scale only, zero point fixed at 8, w = (q - 8) * s
-# Not chosen yet: we pick the scheme every library accepts once each one is
-# wired up. Until then, callers must pass scheme= explicitly.
-quant_scheme: null
+# Project default: symmetric. Marlin runs it natively (uint4b8, no zero-point
+# tensor) and TorchAO's tinygemm stores its zero point (0) exactly.
+quant_scheme: symmetric
 
 # Timing (see common/harness.py once it exists).
 runs:

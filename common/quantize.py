@@ -14,7 +14,20 @@ Layout conventions (shared by every implementation and test)
   dequantization is always  w_hat = (q - z) * s  and the reference code does
   not need to know which scheme was used.
 
-Which scheme is used is set by `quant_scheme` in config/workloads.yaml.
+Which scheme is used is set by `quant_scheme` in config/workloads.yaml
+(project default: symmetric).
+
+Scales are exactly representable in BOTH FP16 and BF16
+-------------------------------------------------------
+Every implementation must receive identical weights and scales. FP16 kernels
+(cuBLAS FP16, Marlin) read FP16 scales; BF16 kernels (TorchAO's tinygemm) read
+BF16 scales. A scale is stored losslessly in both only if it has at most 8
+significant bits (BF16's precision) and lies in FP16's normal range
+[2^-14, 65504]. So after computing s = range / 15 in FP32 we ROUND IT UP to the
+next BF16 value (round_scale_to_bf16_and_fp16) and store it as FP16; converting
+that FP16 value to BF16 is then exact. Rounding up (not to nearest) keeps every
+weight inside the representable grid, so the half-step error bound below still
+holds; the price is a step up to 2^-7 (0.8%) larger than the minimum.
 
 Asymmetric scheme (scale + zero point, per group)
 -------------------------------------------------
@@ -26,14 +39,14 @@ For one group of weights g = {w_1, ..., w_G}:
      the same sign.
 
   2. Scale. The 16 INT4 levels 0..15 span 15 steps, so
-         s = (hi - lo) / 15
-     is the step size between neighbouring levels. s is stored in FP16 (that is
-     what kernels read), and all later steps use the FP16-rounded s so that the
-     stored (q, s, z) triple is exactly what dequantization sees.
+         s = (hi - lo) / 15, rounded UP to a BF16-and-FP16-exact value
+     is the step size between neighbouring levels. All later steps use this
+     stored s, so the stored (q, s, z) triple is exactly what dequantization
+     sees.
 
   3. Zero point. z is the integer level that represents 0.0:
          z = round(-lo / s),  clamped to [0, 15].
-     Because lo <= 0 <= hi, -lo / s lies in [0, 15] (up to FP16 rounding of s).
+     Because lo <= 0 <= hi and s >= (hi - lo) / 15, -lo / s lies in [0, 15].
 
   4. Quantize each weight:
          q = clamp(round(w / s + z), 0, 15)
@@ -41,10 +54,10 @@ For one group of weights g = {w_1, ..., w_G}:
   5. Dequantize:
          w_hat = (q - z) * s
 
-Error bound: without clamping, rounding moves each weight by at most half a
-step, so |w - w_hat| <= s / 2. Clamping at 15 can only bite by a hair, because
-the FP16 rounding of s (relative error <= 2^-11) can push hi / s + z just past
-15.5. The worst case is then about 0.5073 * s. The tests check this bound.
+Error bound: rounding moves each weight by at most half a step, so
+|w - w_hat| <= s / 2. Because s was rounded UP, (hi - lo) / s <= 15, so
+hi / s + z <= 15.5 and clamping at 15 costs at most that same half step.
+The tests check this bound.
 
 Symmetric scheme (scale only, zero point fixed at 8)
 ----------------------------------------------------
@@ -55,7 +68,7 @@ The grid is centred on 0, so only a scale is stored. This is the GPTQ-style
 
   2. Scale. Levels 0..15 minus the fixed zero 8 give signed values -8..7.
      We map [-a, a] onto [-7.5, 7.5] steps, which uses all 16 levels:
-         s = a / 7.5 = 2a / 15        (stored in FP16, as above)
+         s = a / 7.5 = 2a / 15        (rounded up to BF16/FP16-exact, as above)
 
   3. Quantize:
          q = clamp(round(w / s) + 8, 0, 15)
@@ -66,8 +79,8 @@ The grid is centred on 0, so only a scale is stored. This is the GPTQ-style
   4. Dequantize (z = 8 for every group):
          w_hat = (q - 8) * s
 
-Error bound: as above, |w - w_hat| <= s / 2 from rounding. FP16 rounding of s
-can push a / s to about 7.504, giving at most ~0.504 * s at either end.
+Error bound: as above, |w - w_hat| <= s / 2. With s rounded up, a / s <= 7.5,
+so even the clamped top end (+a -> level 15 = +7s) is within half a step.
 Compared with the asymmetric scheme, the step is larger whenever the group's
 weights are not balanced around 0 (s depends on max |w|, not max - min), so
 the average error is a little higher.
@@ -81,6 +94,29 @@ from common.config import QUANT_SCHEMES, load_config, quant_scheme
 
 INT4_MAX = 15        # unsigned 4-bit levels are 0..15
 SYMMETRIC_ZERO = 8   # fixed zero point in symmetric mode (middle of 0..15)
+
+FP16_MIN_NORMAL = 2.0 ** -14   # below this FP16 is subnormal and loses BF16 values
+BF16_MAX_IN_FP16 = 65280.0     # largest BF16 value <= FP16 max (65504)
+
+
+def round_scale_to_bf16_and_fp16(s: torch.Tensor) -> torch.Tensor:
+    """Round positive FP32 scales UP to values exact in both BF16 and FP16.
+
+    BF16 has 8 significant bits, FP16 has 11, so any BF16 value inside FP16's
+    normal range is also an FP16 value. We (1) clamp to that range, (2) round
+    to the nearest BF16, (3) step one BF16 ulp up wherever that rounded down,
+    and return FP16. An all-zero group (s = 0) gets the smallest normal scale;
+    its weights quantize to z and dequantize to exactly 0.
+    """
+    s = s.to(torch.float32).clamp(min=FP16_MIN_NORMAL)
+    if bool((s > BF16_MAX_IN_FP16).any()):
+        raise ValueError("a group's range is too large for an FP16 scale")
+    b = s.to(torch.bfloat16)
+    # For positive floats, the next representable value up is bit pattern + 1.
+    bits = b.view(torch.int16) + (b.to(torch.float32) < s).to(torch.int16)
+    out = bits.view(torch.bfloat16).to(torch.float16)
+    assert torch.equal(out.to(torch.bfloat16).to(torch.float16), out)   # exact in both
+    return out
 
 
 def random_weights(K: int, N: int, seed: int | None = None, device="cpu") -> torch.Tensor:
@@ -162,11 +198,9 @@ def quantize(w: torch.Tensor, group_size: int, scheme: str | None = None) -> Qua
         # Step 1: largest magnitude; the range is [-a, a] = 2a wide.
         step_range = 2.0 * wg.abs().amax(dim=1)
 
-    # Step 2: scale = range / 15 in both schemes, rounded to FP16 because that
-    # is what gets stored. An all-zero group would give s = 0; use a tiny scale
-    # so we never divide by zero (its weights quantize to z and dequantize to
-    # exactly 0).
-    scales = (step_range / INT4_MAX).clamp(min=1e-8).to(torch.float16)
+    # Step 2: scale = range / 15 in both schemes, rounded UP to a value exact
+    # in both BF16 and FP16 (see module docstring), stored as FP16.
+    scales = round_scale_to_bf16_and_fp16(step_range / INT4_MAX)
     s = scales.to(torch.float32)
 
     # Step 3: zero point (the level that represents 0.0).

@@ -30,22 +30,52 @@ Goal is a correct, well-explained study — NOT beating Marlin.
 - Batch sizes (M): 1, 2, 4, 8, 16, 32, 64, 128, 256 (early benchmark: 1, 16, 64)
 - Group sizes: 32, 64, 128 (early benchmark: 128)
 - Use random FP16 matrices with a fixed seed for speed tests. Real model weights only for quality checks.
+- Quantization scheme: **symmetric** by default (`quant_scheme` in `config/workloads.yaml`):
+  w = (q - 8) * s, q in 0..15, one FP16 scale per group. Asymmetric (integer zero points)
+  remains available.
+- Every scale is rounded UP to a value exactly representable in both FP16 and BF16
+  (`common/quantize.py`), so FP16 and BF16 kernels receive identical weights and scales.
+  Rounding up keeps every weight within half a step; it changes the overall quantization
+  error by less than 0.3%.
 
 ## Benchmarking rules (every implementation, no exceptions)
-- Exclude one-time setup from timing (weight repacking, compilation, autotuning).
+- Exclude one-time setup from timing (weight repacking, compilation, autotuning), and
+  input preparation (e.g. casting FP16 activations to BF16 for a BF16 kernel, via
+  `prepare_input()`).
 - Warm up before timing.
 - Time with CUDA events; synchronize before reading the timer.
 - Flush L2 cache between runs so weights come from HBM.
 - Report the median of at least 100 runs.
-- Record: latency (us), effective bandwidth (GB/s), % of measured peak bandwidth, speedup vs cuBLAS FP16.
+- Record: latency (us), effective bandwidth (GB/s), % of measured peak bandwidth, speedup vs
+  cuBLAS FP16 (`impls/cublas`) and vs cuBLAS BF16 (`impls/cublas_bf16`).
 - Bytes for INT4 = N*K/2 (weights) + scales/zeros + activations in + outputs out.
 - Save raw results to `results/*.csv` with columns:
-  impl, layer, K, N, M, group_size, latency_us, bandwidth_gbs, pct_peak, speedup_vs_fp16, correct, gpu, timestamp
+  impl, layer, K, N, M, group_size, latency_us, bandwidth_gbs, pct_peak, speedup_vs_fp16,
+  speedup_vs_bf16, correct, compute_dtype, gpu, timestamp
+
+### Reporting caveats
+- **TorchAO is timed as its kernel only.** TorchAO's own `linear()` for its INT4 tensor casts
+  FP16 activations to BF16, calls `aten._weight_int4pack_mm` through tensor-subclass Python
+  dispatch, and casts the output back. For consistency with Marlin (whose op is also called
+  directly), `impls/torchao` calls `aten._weight_int4pack_mm` directly on a BF16 input prepared
+  outside the timed region. Its numbers therefore EXCLUDE the two dtype casts and the Python
+  dispatch overhead that a real FP16 model using TorchAO would pay. State this whenever
+  TorchAO numbers are reported. (`tests/test_torchao.py` checks the direct call computes
+  exactly what TorchAO's `linear()` computes.)
 
 ## Correctness rules
-- Reference: dequantize the SAME packed INT4 weights in PyTorch (w = (q - z) * s), matmul in FP32.
+- Reference: dequantize the SAME packed INT4 weights in PyTorch (using the library's own
+  formula, e.g. w = (q - z) * s), matmul in FP32.
 - Build each library's reference from that library's own packed weights and scales.
-- Pass if max-abs and relative-L2 error are <= 2x cuBLAS FP16's error against the same reference.
+- **Precision-matched rule:** every implementation declares its compute dtype
+  (`COMPUTE_DTYPE`, FP16 by default, or BF16). It passes if its max-abs and relative-L2 error
+  are both <= 2x the error of cuBLAS **in that same dtype** on the same weights and the same
+  reference (cuBLAS FP16 for FP16 kernels, cuBLAS BF16 for BF16 kernels).
+- Why: BF16 has 8 significant bits to FP16's 11, so a BF16-only kernel (TorchAO's tinygemm) has
+  roughly 7x the error of cuBLAS FP16 by construction, and failed the old FP16-only rule for its
+  precision, not for a bug. Comparing each kernel with cuBLAS in its own dtype still catches real
+  errors (wrong layout, wrong scales, bad accumulation) while judging both precisions fairly.
+  Report BF16 kernels' accuracy as BF16-level, not FP16-level.
 - Never report a speed number for an implementation that fails correctness.
 
 ## Repo layout
@@ -61,6 +91,7 @@ int4-kernel-study/
 │   └── quantize.py           # random INT4 weights + scales/zeros
 ├── impls/
 │   ├── cublas/               # FP16 baseline (no quantization)
+│   ├── cublas_bf16/          # BF16 baseline (no quantization), for BF16 kernels
 │   ├── marlin/               # via vLLM's Marlin ops
 │   ├── bitblas/              # EXCLUDED (requires CUDA 12); kept for reference, never run
 │   ├── torchao/
@@ -80,6 +111,9 @@ int4-kernel-study/
 - Every folder in `impls/` exposes the same interface:
   - `prepare(weights, scales, zeros, group_size)` — one-time setup such as repacking. NOT timed.
   - `run(x)` — the matrix multiply only. Timed by `common/harness.py`.
+  - Optional: `COMPUTE_DTYPE` (FP16 default, or BF16; selects the correctness baseline),
+    `prepare_input(x)` (e.g. FP16 -> BF16 cast; NOT timed), `reference_weights()` (weights
+    decoded from the library's own packed data), `WEIGHT_BITS` (4 default, 16 for cuBLAS).
 - Adding an implementation = adding one folder with that interface; the harness loops over all of them
   (except those in `EXCLUDED_IMPLS`, see "Excluded implementations" above).
 - Cluster-specific files (module loads, Slurm scripts) stay in `carc/`, so the code itself is not tied to CARC.

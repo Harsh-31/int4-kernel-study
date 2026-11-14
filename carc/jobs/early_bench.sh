@@ -4,11 +4,13 @@
 # Submit from the repo root (Slurm resolves the relative --output path and
 # $SLURM_SUBMIT_DIR from where sbatch is called):
 #
-#   sbatch carc/jobs/early_bench.sh                        # cublas marlin (default)
+#   sbatch carc/jobs/early_bench.sh                        # cublas cublas_bf16 marlin torchao
 #   INT4_IMPLS="cublas" sbatch carc/jobs/early_bench.sh    # choose implementations
 #
 # INT4_IMPLS is a space-separated list of folder names in impls/. Keep cublas
-# in it: speedup_vs_fp16 is computed against cuBLAS and is empty without it.
+# and cublas_bf16 in it: speedup_vs_fp16 / speedup_vs_bf16 are computed against
+# them and are empty without them. The scheme comes from quant_scheme in
+# config/workloads.yaml (symmetric).
 #
 # The log goes to results/early_bench_<jobid>.log.
 #
@@ -60,9 +62,9 @@ python -m pytest tests -v -rs
 echo
 # Split the space-separated list into an array, so each name is passed to
 # --impls as its own argument.
-read -r -a IMPLS <<< "${INT4_IMPLS:-cublas marlin}"
-echo "=== early benchmark: ${IMPLS[*]}, symmetric scheme ==="
-python run_benchmark.py --early --scheme symmetric --impls "${IMPLS[@]}"
+read -r -a IMPLS <<< "${INT4_IMPLS:-cublas cublas_bf16 marlin torchao}"
+echo "=== early benchmark: ${IMPLS[*]} (scheme from config) ==="
+python run_benchmark.py --early --impls "${IMPLS[@]}"
 
 echo
 echo "=== done at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="

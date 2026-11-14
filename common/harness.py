@@ -12,10 +12,18 @@ An implementation is any object (usually the package in impls/<name>/) with:
       layout from common/quantize.py: weights = unpacked INT4 q [K, N] uint8
       (0..15), scales [K/G, N] FP16, zeros [K/G, N] uint8 (all 8 if symmetric).
   run(x)
-      x [M, K] FP16 on the GPU -> y [M, N]. The only thing that is timed.
+      x [M, K] on the GPU -> y [M, N]. The only thing that is timed. x is the
+      FP16 activations, or whatever prepare_input() returned for them.
 
 Optional attributes:
 
+  COMPUTE_DTYPE = torch.float16 (default) or torch.bfloat16
+      The precision the kernel computes in. Selects the precision-matched
+      cuBLAS baseline for correctness (common/correctness.py).
+  prepare_input(x) -> tensor
+      Converts the FP16 activations to what run() expects (e.g. a contiguous
+      BF16 copy for a BF16 kernel). Called OUTSIDE the timed region, once per
+      batch size, so dtype casts are not timed. Default: x unchanged.
   reference_weights() -> [K, N] tensor
       The weights dequantized from the implementation's OWN packed data
       (after prepare). CLAUDE.md requires each library's correctness reference
@@ -23,7 +31,7 @@ Optional attributes:
       canonical (q, s, z) is dequantized instead and a warning is printed.
   WEIGHT_BITS = 4 or 16
       Bits per stored weight, used for the byte count. Defaults to 4; the
-      cuBLAS FP16 baseline sets 16.
+      cuBLAS FP16 and BF16 baselines set 16.
 """
 
 import csv
@@ -40,9 +48,12 @@ from common.quantize import dequantize
 
 CSV_COLUMNS = [
     "impl", "layer", "K", "N", "M", "group_size", "latency_us", "bandwidth_gbs",
-    "pct_peak", "speedup_vs_fp16", "correct", "gpu", "timestamp",
+    "pct_peak", "speedup_vs_fp16", "speedup_vs_bf16", "correct", "compute_dtype",
+    "gpu", "timestamp",
 ]
-BASELINE_IMPL = "cublas"   # speedups are relative to this implementation
+BASELINE_IMPL = "cublas"            # cuBLAS FP16: speedup_vs_fp16 is relative to this
+BF16_BASELINE_IMPL = "cublas_bf16"  # cuBLAS BF16: speedup_vs_bf16 is relative to this
+BASELINE_IMPLS = (BASELINE_IMPL, BF16_BASELINE_IMPL)   # always run first, in this order
 
 # Implementations kept in impls/ for reference but never run: discover_impls()
 # skips them WITHOUT importing them, run_benchmark.py refuses them, and their
@@ -203,8 +214,8 @@ def default_csv_path(gpu: str, timestamp: str) -> Path:
 def discover_impls() -> dict:
     """Every package in impls/ that exposes prepare() and run().
 
-    BASELINE_IMPL is placed first so its latency is known before the others
-    need it for speedup_vs_fp16. Names in EXCLUDED_IMPLS are skipped before
+    The baselines (BASELINE_IMPLS) are placed first, in that order, so their
+    latencies are known before the others need them for speedups. Names in EXCLUDED_IMPLS are skipped before
     import. An implementation whose library is not installed (ImportError,
     e.g. no vllm on a laptop) or whose native libraries fail to load (OSError)
     is skipped with a note.
@@ -222,7 +233,23 @@ def discover_impls() -> dict:
             continue
         if callable(getattr(mod, "prepare", None)) and callable(getattr(mod, "run", None)):
             found[info.name] = mod
-    return dict(sorted(found.items(), key=lambda kv: kv[0] != BASELINE_IMPL))
+    return dict(sorted(found.items(), key=_baseline_first))
+
+
+def _baseline_first(item) -> tuple:
+    name = item[0]
+    return (BASELINE_IMPLS.index(name) if name in BASELINE_IMPLS else len(BASELINE_IMPLS), name)
+
+
+def compute_dtype(impl) -> torch.dtype:
+    """The implementation's COMPUTE_DTYPE (FP16 if it does not declare one)."""
+    return getattr(impl, "COMPUTE_DTYPE", torch.float16)
+
+
+def prepare_input(impl, x: torch.Tensor) -> torch.Tensor:
+    """The implementation's run() input for FP16 activations x (not timed)."""
+    fn = getattr(impl, "prepare_input", None)
+    return fn(x) if callable(fn) else x
 
 
 def reference_weights(name: str, impl, qw) -> torch.Tensor:

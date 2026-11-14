@@ -14,17 +14,19 @@ import torch
 import common.config
 from common.config import QUANT_SCHEMES, group_sizes, load_config
 from common.quantize import (
+    FP16_MIN_NORMAL,
     INT4_MAX,
     SYMMETRIC_ZERO,
+    round_scale_to_bf16_and_fp16,
     dequantize,
     quantize,
     random_quantized_weights,
     random_weights,
 )
 
-# Worst-case |w - w_hat| in units of the group's scale s. Rounding alone gives
-# 0.5; FP16 rounding of s can add a tiny clamp error at the ends of the range
-# (see the module docstring in common/quantize.py), so allow a hair more.
+# Worst-case |w - w_hat| in units of the group's scale s. Scales are rounded UP
+# (common/quantize.py), so nothing clips beyond half a step; the extra 0.01
+# only absorbs FP32 arithmetic in the check itself.
 MAX_ERR_IN_STEPS = 0.51
 
 schemes = pytest.mark.parametrize("scheme", QUANT_SCHEMES)
@@ -131,23 +133,54 @@ def test_symmetric_zero_point_is_fixed(group_size):
 
 
 @groups
-def test_symmetric_scale_is_max_abs_over_7_5(group_size):
-    """s = max|w| / 7.5 per group (up to the FP16 rounding of s)."""
+def test_symmetric_scale_is_max_abs_over_7_5_rounded_up(group_size):
+    """s = max|w| / 7.5 per group, rounded UP to the next BF16 value."""
     K, N = small_shape()
     qw = random_quantized_weights(K, N, group_size, "symmetric")
     amax = qw.w.float().reshape(K // group_size, group_size, N).abs().amax(dim=1)
-    expected = (amax / 7.5).to(torch.float16)
-    assert torch.equal(qw.scales, expected)
+    exact = amax / 7.5
+    s = qw.scales.float()
+    assert torch.all(s >= exact)                       # rounded up, never down
+    assert torch.all(s <= exact * (1 + 2.0 ** -7))     # by less than one BF16 ulp
+
+
+# ------------------------------------------------- BF16/FP16-exact scales
+
+@schemes
+@groups
+def test_scales_exact_in_bf16_and_fp16(scheme, group_size):
+    """Every scale survives FP16 -> BF16 -> FP16 unchanged, so FP16 and BF16
+    kernels receive identical scales."""
+    K, N = small_shape()
+    qw = random_quantized_weights(K, N, group_size, scheme)
+    assert qw.scales.dtype == torch.float16
+    assert torch.equal(qw.scales.to(torch.bfloat16).to(torch.float16), qw.scales)
+
+
+def test_round_scale_edge_cases():
+    """Already-BF16 values are kept; others go up one ulp; tiny/zero scales are
+    clamped to FP16's smallest normal; too-large scales are rejected."""
+    exact = torch.tensor([0.5, 1.0, 3.0])                  # representable in BF16
+    assert torch.equal(round_scale_to_bf16_and_fp16(exact).float(), exact)
+    x = torch.tensor([1.0 + 2.0 ** -9])                    # between two BF16 values
+    assert round_scale_to_bf16_and_fp16(x).item() == 1.0 + 2.0 ** -7
+    assert round_scale_to_bf16_and_fp16(torch.tensor([0.0])).item() == FP16_MIN_NORMAL
+    with pytest.raises(ValueError):
+        round_scale_to_bf16_and_fp16(torch.tensor([1e6]))
 
 
 def test_symmetric_grid_ends():
-    """The largest negative weight maps to level 0 (-8s), the largest positive
-    one clamps to level 15 (+7s): the grid reaches -8s but only +7s."""
+    """When max|w| / 7.5 is already BF16-exact (3.75 / 7.5 = 0.5, so no
+    rounding up), the largest negative weight maps to level 0 (-8s) and the
+    largest positive one clamps to level 15 (+7s): the grid reaches -8s but
+    only +7s. (When s is rounded up, |w| / s < 7.5 and the ends map to levels
+    1 and 15 instead, still within half a step.)"""
     G = group_sizes("early")[0]
     w = torch.zeros(G, 2, dtype=torch.float16)
-    w[0, 0], w[1, 0] = -3.0, 1.0    # negative end is the max magnitude
-    w[0, 1], w[1, 1] = 3.0, -1.0    # positive end is the max magnitude
+    w[0, 0], w[1, 0] = -3.75, 1.0   # negative end is the max magnitude
+    w[0, 1], w[1, 1] = 3.75, -1.0   # positive end is the max magnitude
     qw = quantize(w, G, "symmetric")
+    assert torch.all(qw.scales == 0.5)
     assert qw.q[0, 0] == 0
     assert qw.q[0, 1] == INT4_MAX
 

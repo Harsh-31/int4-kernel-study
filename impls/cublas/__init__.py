@@ -14,7 +14,8 @@ import torch
 
 from common.quantize import dequantize
 
-WEIGHT_BITS = 16   # read by the harness to count bytes moved
+WEIGHT_BITS = 16              # read by the harness to count bytes moved
+COMPUTE_DTYPE = torch.float16
 
 _w: torch.Tensor | None = None   # [K, N] FP16, set by prepare()
 
