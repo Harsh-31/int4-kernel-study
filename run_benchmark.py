@@ -22,6 +22,7 @@ from common.config import batch_sizes, group_sizes, load_config, quant_scheme
 from common.correctness import check
 from common.harness import (
     BASELINE_IMPL,
+    EXCLUDED_IMPLS,
     append_row,
     bandwidth_gbs,
     bytes_moved,
@@ -125,10 +126,17 @@ def main() -> None:
     parser.add_argument("--scheme", choices=["asymmetric", "symmetric"], default=None,
                         help="defaults to quant_scheme in config/workloads.yaml")
     parser.add_argument("--impls", nargs="+", default=None,
-                        help="subset of impls/ to run (default: every implemented one)")
+                        help="subset of impls/ to run (default: every implemented one, "
+                             f"except the excluded {sorted(EXCLUDED_IMPLS)})")
     parser.add_argument("--out", type=Path, default=None,
                         help="CSV path (default: results/<gpu>_<time>.csv)")
     args = parser.parse_args()
+
+    # Excluded implementations (common.harness.EXCLUDED_IMPLS) are never in the
+    # default list, and naming one explicitly is an error, not a silent skip.
+    excluded = [name for name in (args.impls or []) if name in EXCLUDED_IMPLS]
+    if excluded:
+        parser.error("; ".join(f"{name} is excluded: {EXCLUDED_IMPLS[name]}" for name in excluded))
 
     impls = discover_impls()
     if args.impls:

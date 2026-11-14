@@ -43,6 +43,15 @@ CSV_COLUMNS = [
     "pct_peak", "speedup_vs_fp16", "correct", "gpu", "timestamp",
 ]
 BASELINE_IMPL = "cublas"   # speedups are relative to this implementation
+
+# Implementations kept in impls/ for reference but never run: discover_impls()
+# skips them WITHOUT importing them, run_benchmark.py refuses them, and their
+# tests skip with "excluded: <reason>". Keep in sync with CLAUDE.md.
+EXCLUDED_IMPLS = {
+    # bitblas 0.1.0's bundled TVM links libcudart.so.12 / libnvrtc.so.12; our
+    # environment is CUDA 13 only and we do not mix CUDA 12 and 13.
+    "bitblas": "requires CUDA 12",
+}
 RESULTS_DIR = REPO_ROOT / "results"
 MB = 2**20
 
@@ -195,15 +204,20 @@ def discover_impls() -> dict:
     """Every package in impls/ that exposes prepare() and run().
 
     BASELINE_IMPL is placed first so its latency is known before the others
-    need it for speedup_vs_fp16. An implementation whose library is not
-    installed (ImportError, e.g. no vllm on a laptop) is skipped with a note.
+    need it for speedup_vs_fp16. Names in EXCLUDED_IMPLS are skipped before
+    import. An implementation whose library is not installed (ImportError,
+    e.g. no vllm on a laptop) or whose native libraries fail to load (OSError)
+    is skipped with a note.
     """
     import impls
     found = {}
     for info in pkgutil.iter_modules(impls.__path__):
+        if info.name in EXCLUDED_IMPLS:
+            print(f"[harness] skipping impls/{info.name}: excluded: {EXCLUDED_IMPLS[info.name]}")
+            continue
         try:
             mod = importlib.import_module(f"impls.{info.name}")
-        except ImportError as e:
+        except (ImportError, OSError) as e:
             print(f"[harness] skipping impls/{info.name}: {e}")
             continue
         if callable(getattr(mod, "prepare", None)) and callable(getattr(mod, "run", None)):

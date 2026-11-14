@@ -132,3 +132,35 @@ def test_sweep_end_to_end(tmp_path):
             assert float(r["speedup_vs_fp16"]) > 0
         if r["impl"] == BASELINE_IMPL:
             assert float(r["speedup_vs_fp16"]) == 1.0
+
+
+# ------------------------------------------------------------- excluded impls
+
+def test_excluded_impls_are_never_discovered_or_imported(monkeypatch):
+    """Excluded implementations stay out even if their library IS importable
+    (bitblas is still installed in the CARC environment), and are skipped
+    before import so their native libraries are never loaded."""
+    import sys
+    import types
+
+    from common.harness import EXCLUDED_IMPLS
+
+    for name in EXCLUDED_IMPLS:
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))   # pretend installed
+        monkeypatch.delitem(sys.modules, f"impls.{name}", raising=False)
+    found = discover_impls()
+    for name in EXCLUDED_IMPLS:
+        assert name not in found
+        assert f"impls.{name}" not in sys.modules
+
+
+def test_run_benchmark_refuses_excluded_impls(monkeypatch, capsys):
+    import run_benchmark
+    from common.harness import EXCLUDED_IMPLS
+
+    for name, reason in EXCLUDED_IMPLS.items():
+        monkeypatch.setattr("sys.argv", ["run_benchmark.py", "--impls", "cublas", name])
+        with pytest.raises(SystemExit) as exc:
+            run_benchmark.main()
+        assert exc.value.code == 2   # argparse error
+        assert f"{name} is excluded: {reason}" in capsys.readouterr().err

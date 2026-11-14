@@ -2,9 +2,19 @@
 
 ## What this project is
 A single-GPU study of INT4 weight-only (W4A16) matrix-multiply kernels for LLM decode.
-We compare existing kernels (Marlin, BitBLAS, TorchAO) against cuBLAS FP16 and our own
+We compare existing kernels (Marlin, TorchAO) against cuBLAS FP16 and our own
 Triton and CUDA kernels, and explain the results with roofline and Nsight analysis.
 Goal is a correct, well-explained study — NOT beating Marlin.
+
+### Excluded implementations
+- **BitBLAS — excluded: requires CUDA 12.** BitBLAS 0.1.0's bundled TVM is linked against
+  the CUDA 12 runtime (`libcudart.so.12`, `libnvrtc.so.12`; `libnvrtc.so.12` confirmed missing
+  on CARC). Our environment is CUDA 13 only, and we do not mix CUDA 12 and 13 in one environment.
+  `impls/bitblas/` stays in the repo for reference but is never run: it is listed in
+  `EXCLUDED_IMPLS` in `common/harness.py`, so it is not in the default implementation list,
+  `run_benchmark.py --impls bitblas` is refused, it is not in any job script, and
+  `tests/test_bitblas.py` skips with "excluded: requires CUDA 12". Do not install CUDA 12
+  libraries to re-enable it.
 
 ## Hardware
 - USC CARC Discovery cluster, Slurm scheduler.
@@ -52,7 +62,7 @@ int4-kernel-study/
 ├── impls/
 │   ├── cublas/               # FP16 baseline (no quantization)
 │   ├── marlin/               # via vLLM's Marlin ops
-│   ├── bitblas/
+│   ├── bitblas/              # EXCLUDED (requires CUDA 12); kept for reference, never run
 │   ├── torchao/
 │   ├── triton_kernel/        # our Triton kernel
 │   └── cuda_kernel/          # our CUDA kernel
@@ -70,7 +80,8 @@ int4-kernel-study/
 - Every folder in `impls/` exposes the same interface:
   - `prepare(weights, scales, zeros, group_size)` — one-time setup such as repacking. NOT timed.
   - `run(x)` — the matrix multiply only. Timed by `common/harness.py`.
-- Adding an implementation = adding one folder with that interface; the harness loops over all of them.
+- Adding an implementation = adding one folder with that interface; the harness loops over all of them
+  (except those in `EXCLUDED_IMPLS`, see "Excluded implementations" above).
 - Cluster-specific files (module loads, Slurm scripts) stay in `carc/`, so the code itself is not tied to CARC.
 
 ## Working style

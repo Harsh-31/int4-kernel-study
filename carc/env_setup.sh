@@ -42,7 +42,11 @@
 # `cuda-toolkit==X` dependency). Those wheels install into
 # site-packages/nvidia/cu<major>/{bin,include,lib}, which is used as CUDA_HOME.
 # A CARC module would give a different CUDA version than PyTorch's, and kernels
-# we compile (our CUDA kernel, BitBLAS) must match the runtime torch loads.
+# we compile (our CUDA kernel) must match the runtime torch loads.
+#
+# BitBLAS is NOT installed: it is excluded from the study because bitblas 0.1.0
+# needs the CUDA 12 runtime (libcudart.so.12, libnvrtc.so.12), and we do not
+# mix CUDA 12 and 13 in one environment. See CLAUDE.md.
 
 # "${VAR-default}" (no colon) keeps an explicitly empty INT4_ENV_PREFIX empty,
 # which selects the named-environment mode below.
@@ -181,14 +185,14 @@ env_exists() {
 
 print_versions() {
     # importlib.metadata reads the installed version without importing the
-    # package, so this works on the login node even for packages (vLLM,
-    # BitBLAS) that probe for a GPU on import.
+    # package, so this works on the login node even for packages (vLLM) that
+    # probe for a GPU on import.
     python - <<'EOF'
 import sys
 from importlib.metadata import PackageNotFoundError, version
 
 print(f"python            {sys.version.split()[0]}  ({sys.executable})")
-for pkg in ("torch", "triton", "vllm", "bitblas", "torchao", "cuda-toolkit",
+for pkg in ("torch", "triton", "vllm", "torchao", "cuda-toolkit",
             "nvidia-cuda-nvcc", "pyyaml", "pytest"):
     try:
         print(f"{pkg:17s} {version(pkg)}")
@@ -238,7 +242,7 @@ python -m pip install --upgrade pip
 python -m pip install vllm
 
 # 2. Freeze the torch/triton versions vLLM chose, and pass them as a pip
-#    constraint below. Without this, installing BitBLAS or TorchAO could
+#    constraint below. Without this, installing TorchAO could
 #    silently replace torch with a version vLLM's compiled kernels don't match.
 #    With it, pip fails loudly instead if a package needs a different torch.
 CONSTRAINTS="$(mktemp)"
@@ -248,7 +252,8 @@ echo "[env] pinning versions chosen by vLLM:"
 cat "$CONSTRAINTS"
 
 # 3. The rest. pyyaml loads config/workloads.yaml; pytest runs tests/.
-python -m pip install -c "$CONSTRAINTS" triton bitblas torchao pyyaml pytest
+#    (No bitblas: excluded, see the CUDA toolkit note at the top.)
+python -m pip install -c "$CONSTRAINTS" triton torchao pyyaml pytest
 
 # 4. CUDA compiler matching PyTorch. Read the exact cuda-toolkit version torch
 #    depends on (e.g. torch 2.11.0+cu130 requires cuda-toolkit==13.0.2) and
