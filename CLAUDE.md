@@ -44,7 +44,11 @@ Goal is a correct, well-explained study — NOT beating Marlin.
   `prepare_input()`).
 - Warm up before timing.
 - Time with CUDA events; synchronize before reading the timer.
-- Flush L2 cache between runs so weights come from HBM.
+- Flush L2 cache between runs so weights come from HBM. Flush by READING a buffer larger
+  than L2 (`flush_l2` in `common/harness.py`), never by writing one: a write flush leaves dirty
+  lines whose write-back to HBM lands inside the timed region. On the A100 that inflated
+  latencies by up to 1.65x (`analysis/flush_experiment.py`). Result CSVs from before
+  2026-11-16 used the write flush and must not be reported.
 - Report the median of at least 100 runs.
 - Record: latency (us), effective bandwidth (GB/s), % of measured peak bandwidth, speedup vs
   cuBLAS FP16 (`impls/cublas`) and vs cuBLAS BF16 (`impls/cublas_bf16`).

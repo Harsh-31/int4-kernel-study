@@ -22,7 +22,10 @@ from common.harness import (
     compute_dtype,
     default_csv_path,
     discover_impls,
+    flush_l2,
+    make_l2_flush_buffer,
     median_us,
+    time_runs,
     prepare_input,
 )
 from common.quantize import dequantize
@@ -194,3 +197,17 @@ def test_run_benchmark_refuses_excluded_impls(monkeypatch, capsys):
             run_benchmark.main()
         assert exc.value.code == 2   # argparse error
         assert f"{name} is excluded: {reason}" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU (run via Slurm)")
+def test_flush_reads_but_never_writes_the_buffer():
+    """The flush must be read-only (see flush_l2): the buffer stays all zeros."""
+    buf = make_l2_flush_buffer()
+    buf[::4096] = 7                     # a recognisable pattern
+    before = buf.clone()
+    flush_l2(buf)
+    torch.cuda.synchronize()
+    assert torch.equal(buf, before)
+    times = time_runs(lambda: None, n_warmup=1, n_timed=3, flush_buf=buf)
+    assert len(times) == 3 and all(t >= 0 for t in times)
+    assert torch.equal(buf, before)

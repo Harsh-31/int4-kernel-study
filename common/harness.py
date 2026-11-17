@@ -70,21 +70,45 @@ MB = 2**20
 # --------------------------------------------------------------------- timing
 
 def make_l2_flush_buffer() -> torch.Tensor:
-    """A GPU buffer larger than the L2 cache, zeroed before every timed run.
+    """A GPU buffer larger than the L2 cache, READ before every timed run (flush_l2).
 
     Why: an A100 has a 40 MB L2. Several of our INT4 weight matrices are small
     enough to fit in it (attn_out: 4096*4096/2 = 8 MB). Without a flush, every
     timed run after the first would read the weights from L2 instead of HBM and
     look unrealistically fast. In real decode, the other layers' weights have
     evicted this layer's weights by the time it runs again, so HBM is the
-    honest case. Writing a buffer >= 2x the L2 size evicts everything else.
+    honest case. Reading a buffer >= 2x the L2 size evicts everything else.
+
+    The buffer is filled once here, and the write-back of that fill finishes
+    before any timing starts (we synchronize).
     """
     size = load_config()["harness"]["l2_flush_mb"] * MB
     l2 = getattr(torch.cuda.get_device_properties(0), "L2_cache_size", 0)
     if l2 and size < 2 * l2:
         raise ValueError(f"harness.l2_flush_mb ({size // MB} MB) must be >= 2x the "
                          f"L2 cache ({l2 // MB} MB); increase it in config/workloads.yaml")
-    return torch.empty(size, dtype=torch.uint8, device="cuda")
+    buf = torch.zeros(size, dtype=torch.uint8, device="cuda")
+    torch.cuda.synchronize()
+    return buf
+
+
+def flush_l2(buf: torch.Tensor) -> None:
+    """Evict L2 by READING buf (never writing it). Called before each timed run.
+
+    Why read, not write: writing (e.g. buf.zero_()) also evicts the weights,
+    but it leaves L2 full of DIRTY lines, i.e. data not yet saved to HBM. When
+    the timed kernel then reads its weights, the GPU must first write those
+    dirty lines back to HBM, and that extra traffic lands inside the timed
+    region. Reading leaves only CLEAN lines, which can be dropped for free.
+
+    Measured on the A100 (analysis/flush_experiment.py, Nov 2026): the write
+    flush inflated latencies by up to 1.65x (cuBLAS FP16, attn_out), while
+    "read" and "write then read" gave identical times. That shows the extra
+    time was the dirty-line write-back, not the eviction itself.
+
+    sum() over int32 words reads every byte and writes a single scalar.
+    """
+    buf.view(torch.int32).sum()
 
 
 def time_runs(fn, n_warmup: int, n_timed: int, flush_buf: torch.Tensor | None = None) -> list[float]:
@@ -119,7 +143,7 @@ def time_runs(fn, n_warmup: int, n_timed: int, flush_buf: torch.Tensor | None = 
     ends = [torch.cuda.Event(enable_timing=True) for _ in range(n_timed)]
     for start, end in zip(starts, ends):
         if flush_buf is not None:
-            flush_buf.zero_()
+            flush_l2(flush_buf)   # read-only flush; see flush_l2 for why not zero_()
         start.record()
         fn()
         end.record()

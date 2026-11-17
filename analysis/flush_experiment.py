@@ -2,17 +2,17 @@
 
 Background
 ----------
-common/harness.py flushes L2 before every timed run by WRITING zeros to a
-256 MB buffer (flush_buf.zero_()). That evicts the weights, as intended, but
-it may leave up to a full L2 (40 MB on A100) of DIRTY lines: data that must
+Until 2026-11-16, common/harness.py flushed L2 before every timed run by
+WRITING zeros to a 256 MB buffer (flush_buf.zero_()). That evicts the
+weights, as intended, but it may leave up to a full L2 (40 MB on A100) of DIRTY lines: data that must
 be written back to HBM when evicted. If the timed kernel's own reads evict
 those lines, the write-back traffic lands inside the timed region and makes
 the kernel look slower than it is, most of all for small layers.
 
 This script times the same kernels with four flush variants:
 
-  write            flush_buf.zero_()                    (what the harness does today)
-  read             read flush_buf, write nothing        (leaves only CLEAN lines)
+  write            flush_buf.zero_()                    (the harness's old flush)
+  read             read flush_buf, write nothing        (the harness's flush now)
   write_then_read  zero_() then read                    (dirty lines written back
                                                          BEFORE the timer starts)
   none             no flush                             (small layers may hit L2;
@@ -23,9 +23,9 @@ How to read the result:
   write ~ read ~ write_then_read   -> the flush method does not matter
 
 The timing loop is the harness's time_runs() with the flush step made
-pluggable; it is copied here so common/harness.py stays unchanged until this
-experiment says it should change. Run counts, sizes and seeds all come from
-config/workloads.yaml.
+pluggable. Result on the A100: write was up to 1.65x slower than read, and
+read == write_then_read, so the harness now uses the read flush (flush_l2).
+Run counts, sizes and seeds all come from config/workloads.yaml.
 
 Run (GPU node, via Slurm):  sbatch carc/jobs/flush_ab.sh
 """
