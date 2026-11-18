@@ -33,8 +33,16 @@ runs:
 
 # Harness buffers (see common/harness.py).
 harness:
-  l2_flush_mb: 256        # zeroed before every timed run; must be >= 2x the GPU's L2 (A100: 40 MB)
+  l2_flush_mb: 256        # read before every timed run; must be >= 2x the GPU's L2 (A100: 40 MB)
   peak_bw_copy_mb: 1024   # size of the device-to-device copy used to measure peak HBM bandwidth
+
+# Nsight Compute profiling cases (carc/jobs/profile_ncu.sh): every impl x layer x
+# batch size below is profiled once, at the early group size. Kept small because
+# each case is a separate profiler run.
+profiling:
+  impls: [cublas, marlin, triton_kernel_v2]
+  layers: [attn_out, mlp_up]
+  batch_sizes: [1, 64]
 
 # Fixed seed for random FP16 weights/activations used in speed tests.
 seed: 1234
