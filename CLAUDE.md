@@ -100,6 +100,7 @@ int4-kernel-study/
 │   ├── bitblas/              # EXCLUDED (requires CUDA 12); kept for reference, never run
 │   ├── torchao/
 │   ├── triton_kernel/        # our Triton kernel
+│   ├── triton_kernel_v2/     # our Triton kernel, v1 + split-K
 │   └── cuda_kernel/          # our CUDA kernel
 ├── carc/
 │   ├── env_setup.sh          # conda environment + module loads

@@ -177,6 +177,12 @@ def prepare(weights: torch.Tensor, scales: torch.Tensor, zeros: torch.Tensor,
             group_size: int) -> None:
     """Pack q into [K/2, N] uint8 (two K-neighbours per byte). Not timed."""
     _state.clear()
+    _state.update(pack(weights, scales, zeros, group_size))
+
+
+def pack(weights: torch.Tensor, scales: torch.Tensor, zeros: torch.Tensor,
+         group_size: int) -> dict:
+    """The packing behind prepare(), returned as a dict (also used by triton_kernel_v2)."""
     K, N = weights.shape
     if not bool(torch.all(zeros == SYMMETRIC_ZERO)):
         raise NotImplementedError("triton_kernel v1 supports the symmetric scheme only")
@@ -189,8 +195,8 @@ def prepare(weights: torch.Tensor, scales: torch.Tensor, zeros: torch.Tensor,
 
     q = weights.to(torch.uint8)
     packed = (q[0::2] | (q[1::2] << 4)).contiguous()      # even k low, odd k high
-    _state.update(K=K, N=N, group_size=group_size, block_k=block_k,
-                  packed=packed, scales=scales.contiguous())
+    return dict(K=K, N=N, group_size=group_size, block_k=block_k,
+                packed=packed, scales=scales.contiguous())
 
 
 # ---------------------------------------------------------------------- run
@@ -236,7 +242,11 @@ def unpack(packed: torch.Tensor) -> torch.Tensor:
 
 def reference_weights() -> torch.Tensor:
     """[K, N] FP32 weights decoded from the packed buffer and scales the kernel reads."""
-    st = _state
+    return reference_weights_from(_state)
+
+
+def reference_weights_from(st: dict) -> torch.Tensor:
+    """reference_weights() for a dict returned by pack()."""
     q = unpack(st["packed"])
     z = torch.full_like(st["scales"], SYMMETRIC_ZERO, dtype=torch.uint8)
     return dequantize(q, st["scales"], z, st["group_size"])
