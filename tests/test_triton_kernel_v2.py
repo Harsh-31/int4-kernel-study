@@ -41,7 +41,8 @@ def _prepare(layer):
 @pytest.fixture(autouse=True)
 def _reset_forced_split():
     yield
-    v2.FORCE_SPLIT_K = None
+    v2.FORCE_SPLIT_K = v2.FORCE_BLOCK_M = v2.FORCE_BLOCK_N = None
+    v2.NUM_WARPS = v2.NUM_STAGES = None
 
 
 def test_declares_fp16_compute():
@@ -68,6 +69,18 @@ def test_triton_v2_passes_correctness(layer, split):
         result = check(out, x, w_ref, v2.COMPUTE_DTYPE)
         assert result.passed, (f"split={split} M={M}: triton_v2 {result.impl} "
                                f"vs cuBLAS FP16 {result.baseline}")
+
+
+def test_overrides_stay_correct_and_expose_the_compiled_kernel():
+    """The knobs used by analysis/triton_inspect.py must not break correctness."""
+    _, K, N = _prepare("attn_out")
+    w_ref = v2.reference_weights()
+    v2.FORCE_BLOCK_M, v2.FORCE_BLOCK_N, v2.NUM_WARPS, v2.NUM_STAGES = 32, 128, 8, 2
+    for M in batch_sizes("early"):
+        x = random_activations(M, K, device="cuda")
+        result = check(v2.run(x), x, w_ref, v2.COMPUTE_DTYPE)
+        assert result.passed, f"M={M}: {result.impl} vs {result.baseline}"
+    assert v2._state["last_kernel"] is not None
 
 
 def test_auto_split_fills_the_gpu():

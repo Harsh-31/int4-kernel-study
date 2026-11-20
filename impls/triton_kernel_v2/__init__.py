@@ -55,8 +55,14 @@ TARGET_PROGRAMS_PER_SM = 4          # enough programs that every SM has work, wi
                                     # spares to hide memory latency
 MAX_SPLIT_K = 32
 
-# Tests (and experiments) can set this to force a SPLIT_K value; None = automatic.
+# Overrides for tests and experiments (analysis/triton_inspect.py). None = the
+# defaults described above (automatic SPLIT_K, v1's BLOCK_M rule, BLOCK_N, and
+# Triton's own default num_warps / num_stages). The benchmark never sets them.
 FORCE_SPLIT_K: int | None = None
+FORCE_BLOCK_M: int | None = None
+FORCE_BLOCK_N: int | None = None
+NUM_WARPS: int | None = None      # warps (groups of 32 threads) per program
+NUM_STAGES: int | None = None     # how many loop iterations of loads Triton keeps in flight
 
 _state: dict = {}
 
@@ -149,12 +155,20 @@ def prepare(weights: torch.Tensor, scales: torch.Tensor, zeros: torch.Tensor,
 
 # ---------------------------------------------------------------------- run
 
+def block_m_for(M: int) -> int:
+    return FORCE_BLOCK_M or v1.block_m_for(M)
+
+
+def block_n() -> int:
+    return FORCE_BLOCK_N or BLOCK_N
+
+
 def split_k_for(M: int, N: int, K: int, block_k: int, num_sms: int) -> int:
     """Smallest power of two SPLIT_K giving >= TARGET_PROGRAMS_PER_SM * num_sms
     programs, such that every split gets a whole number of BLOCK_K slices."""
     if FORCE_SPLIT_K is not None:
         return FORCE_SPLIT_K
-    programs = triton.cdiv(N, BLOCK_N) * triton.cdiv(M, v1.block_m_for(M))
+    programs = triton.cdiv(N, block_n()) * triton.cdiv(M, block_m_for(M))
     k_slices = K // block_k
     split = 1
     while (programs * split < TARGET_PROGRAMS_PER_SM * num_sms
@@ -169,7 +183,7 @@ def run(x: torch.Tensor) -> torch.Tensor:
     st = _state
     M, K = x.shape
     N = st["N"]
-    block_m = v1.block_m_for(M)
+    block_m, bn = block_m_for(M), block_n()
     split_k = split_k_for(M, N, K, st["block_k"], st["num_sms"])
     if (K // st["block_k"]) % split_k:
         raise ValueError(f"SPLIT_K={split_k} must divide K/BLOCK_K = {K // st['block_k']}")
@@ -180,8 +194,13 @@ def run(x: torch.Tensor) -> torch.Tensor:
         # Atomic adds need a zeroed FP32 buffer to add into.
         out = torch.zeros((M, N), dtype=torch.float32, device=x.device)
 
-    grid = (triton.cdiv(N, BLOCK_N), split_k, triton.cdiv(M, block_m))
-    int4_matmul_splitk_kernel[grid](
+    # Only pass num_warps / num_stages when overridden, so Triton's defaults apply.
+    launch_opts = {k: v for k, v in (("num_warps", NUM_WARPS), ("num_stages", NUM_STAGES))
+                   if v is not None}
+    grid = (triton.cdiv(N, bn), split_k, triton.cdiv(M, block_m))
+    # The launch returns the compiled kernel; keeping it lets
+    # analysis/triton_inspect.py read its register / spill counts.
+    st["last_kernel"] = int4_matmul_splitk_kernel[grid](
         x, st["packed"], st["scales"], out,
         M, N, K,
         K // split_k,
@@ -190,8 +209,9 @@ def run(x: torch.Tensor) -> torch.Tensor:
         st["scales"].stride(0), st["scales"].stride(1),
         out.stride(0), out.stride(1),
         GROUP_SIZE=st["group_size"],
-        BLOCK_M=block_m, BLOCK_N=BLOCK_N, BLOCK_K=st["block_k"],
+        BLOCK_M=block_m, BLOCK_N=bn, BLOCK_K=st["block_k"],
         SPLIT_K=split_k,
+        **launch_opts,
     )
     return out if split_k == 1 else out.to(torch.float16)
 

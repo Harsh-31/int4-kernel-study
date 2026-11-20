@@ -21,6 +21,10 @@ Goal is a correct, well-explained study — NOT beating Marlin.
 - Final numbers: NVIDIA A100-80GB (request with `--constraint=a100-80gb`).
 - Development: A40 (debug partition is OK).
 - NEVER run GPU work on the login node. All GPU runs go through Slurm job scripts in `carc/jobs/`.
+- GPU performance counters are blocked for normal users on CARC (`ERR_NVGPUCTRPERM`, job
+  14345842), so Nsight Compute cannot profile there. Diagnose our Triton kernels with
+  counter-free evidence instead: `carc/jobs/triton_inspect.sh` (compiler register/spill
+  counts and a tile-size sweep). `carc/jobs/profile_ncu.sh` stays for a machine that allows it.
 
 ## Workloads (Llama-3-8B layer shapes, K -> N)
 - attn_qkv:  4096 -> 6144
