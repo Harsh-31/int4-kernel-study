@@ -163,12 +163,11 @@ def block_n() -> int:
     return FORCE_BLOCK_N or BLOCK_N
 
 
-def split_k_for(M: int, N: int, K: int, block_k: int, num_sms: int) -> int:
+def choose_split_k(M: int, N: int, K: int, block_k: int, num_sms: int,
+                   block_m: int, block_n: int) -> int:
     """Smallest power of two SPLIT_K giving >= TARGET_PROGRAMS_PER_SM * num_sms
     programs, such that every split gets a whole number of BLOCK_K slices."""
-    if FORCE_SPLIT_K is not None:
-        return FORCE_SPLIT_K
-    programs = triton.cdiv(N, block_n()) * triton.cdiv(M, block_m_for(M))
+    programs = triton.cdiv(N, block_n) * triton.cdiv(M, block_m)
     k_slices = K // block_k
     split = 1
     while (programs * split < TARGET_PROGRAMS_PER_SM * num_sms
@@ -178,13 +177,19 @@ def split_k_for(M: int, N: int, K: int, block_k: int, num_sms: int) -> int:
     return split
 
 
-def run(x: torch.Tensor) -> torch.Tensor:
-    """y [M, N] FP16 = x [M, K] FP16 @ dequant(W). The only timed call."""
-    st = _state
+def split_k_for(M: int, N: int, K: int, block_k: int, num_sms: int) -> int:
+    """SPLIT_K v2 uses: forced, or chosen for v2's current tile sizes."""
+    if FORCE_SPLIT_K is not None:
+        return FORCE_SPLIT_K
+    return choose_split_k(M, N, K, block_k, num_sms, block_m_for(M), block_n())
+
+
+def launch(x: torch.Tensor, st: dict, block_m: int, block_n: int, split_k: int,
+           num_warps: int | None = None, num_stages: int | None = None) -> torch.Tensor:
+    """Run the kernel with explicit settings. Shared by run() below and by
+    impls/triton_kernel_v2_tuned, which only picks different settings."""
     M, K = x.shape
     N = st["N"]
-    block_m, bn = block_m_for(M), block_n()
-    split_k = split_k_for(M, N, K, st["block_k"], st["num_sms"])
     if (K // st["block_k"]) % split_k:
         raise ValueError(f"SPLIT_K={split_k} must divide K/BLOCK_K = {K // st['block_k']}")
 
@@ -194,10 +199,10 @@ def run(x: torch.Tensor) -> torch.Tensor:
         # Atomic adds need a zeroed FP32 buffer to add into.
         out = torch.zeros((M, N), dtype=torch.float32, device=x.device)
 
-    # Only pass num_warps / num_stages when overridden, so Triton's defaults apply.
-    launch_opts = {k: v for k, v in (("num_warps", NUM_WARPS), ("num_stages", NUM_STAGES))
+    # Only pass num_warps / num_stages when given, so Triton's defaults apply otherwise.
+    launch_opts = {k: v for k, v in (("num_warps", num_warps), ("num_stages", num_stages))
                    if v is not None}
-    grid = (triton.cdiv(N, bn), split_k, triton.cdiv(M, block_m))
+    grid = (triton.cdiv(N, block_n), split_k, triton.cdiv(M, block_m))
     # The launch returns the compiled kernel; keeping it lets
     # analysis/triton_inspect.py read its register / spill counts.
     st["last_kernel"] = int4_matmul_splitk_kernel[grid](
@@ -209,11 +214,20 @@ def run(x: torch.Tensor) -> torch.Tensor:
         st["scales"].stride(0), st["scales"].stride(1),
         out.stride(0), out.stride(1),
         GROUP_SIZE=st["group_size"],
-        BLOCK_M=block_m, BLOCK_N=bn, BLOCK_K=st["block_k"],
+        BLOCK_M=block_m, BLOCK_N=block_n, BLOCK_K=st["block_k"],
         SPLIT_K=split_k,
         **launch_opts,
     )
     return out if split_k == 1 else out.to(torch.float16)
+
+
+def run(x: torch.Tensor) -> torch.Tensor:
+    """y [M, N] FP16 = x [M, K] FP16 @ dequant(W). The only timed call."""
+    st = _state
+    M, K = x.shape
+    return launch(x, st, block_m_for(M), block_n(),
+                  split_k_for(M, st["N"], K, st["block_k"], st["num_sms"]),
+                  NUM_WARPS, NUM_STAGES)
 
 
 # ------------------------------------------------- reference (from our packed data)

@@ -105,6 +105,7 @@ int4-kernel-study/
 │   ├── torchao/
 │   ├── triton_kernel/        # our Triton kernel
 │   ├── triton_kernel_v2/     # our Triton kernel, v1 + split-K
+│   ├── triton_kernel_v2_tuned/ # v2 with tile settings from the A100 sweep
 │   └── cuda_kernel/          # our CUDA kernel
 ├── carc/
 │   ├── env_setup.sh          # conda environment + module loads
