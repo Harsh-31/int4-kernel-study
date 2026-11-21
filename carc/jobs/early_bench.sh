@@ -4,7 +4,7 @@
 # Submit from the repo root (Slurm resolves the relative --output path and
 # $SLURM_SUBMIT_DIR from where sbatch is called):
 #
-#   sbatch carc/jobs/early_bench.sh     # cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned
+#   sbatch carc/jobs/early_bench.sh     # cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned cuda_kernel
 #   INT4_IMPLS="cublas" sbatch carc/jobs/early_bench.sh    # choose implementations
 #
 # INT4_IMPLS is a space-separated list of folder names in impls/. Keep cublas
@@ -62,7 +62,7 @@ python -m pytest tests -v -rs
 echo
 # Split the space-separated list into an array, so each name is passed to
 # --impls as its own argument.
-read -r -a IMPLS <<< "${INT4_IMPLS:-cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned}"
+read -r -a IMPLS <<< "${INT4_IMPLS:-cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned cuda_kernel}"
 echo "=== early benchmark: ${IMPLS[*]} (scheme from config) ==="
 python run_benchmark.py --early --impls "${IMPLS[@]}"
 

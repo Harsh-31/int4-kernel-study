@@ -132,4 +132,6 @@ int4-kernel-study/
 - Small, reviewable changes. Explain non-obvious GPU code in comments.
 - Ask before adding new dependencies.
 - When unsure about a library API, check its docs or source instead of guessing.
-- For our CUDA kernel: the team writes the core logic; help by explaining, reviewing and debugging.
+- For our CUDA kernel: the user is working alone (no team members available, decided
+  2026-11-21), so Claude writes the kernel and explains it step by step so the user can
+  understand and present it.
