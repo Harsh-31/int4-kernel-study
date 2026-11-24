@@ -1,0 +1,72 @@
+#!/bin/bash
+# FULL benchmark for the report: GPU tests, then every implementation on the full
+# sweep (all batch sizes x all group sizes from config/workloads.yaml). Run it once,
+# when all kernels are final; its CSV is what analysis/plots.py turns into figures.
+#
+# Submit from the repo root (Slurm resolves the relative --output path and
+# $SLURM_SUBMIT_DIR from where sbatch is called):
+#
+#   sbatch carc/jobs/full_bench.sh     # cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned cuda_kernel
+#   INT4_IMPLS="cublas" sbatch carc/jobs/full_bench.sh    # choose implementations
+#
+# INT4_IMPLS is a space-separated list of folder names in impls/. Keep cublas
+# and cublas_bf16 in it: speedup_vs_fp16 / speedup_vs_bf16 are computed against
+# them and are empty without them. The scheme comes from quant_scheme in
+# config/workloads.yaml (symmetric).
+#
+# The log goes to results/full_bench_<jobid>.log.
+#
+# Environment location and caches (INT4_ENV_PREFIX, PIP_CACHE_DIR,
+# CONDA_PKGS_DIRS, HF_HOME) are set in carc/env_setup.sh, which this job
+# sources, so the paths live in one place. Override any of them at submit time:
+#
+#   INT4_ENV_PREFIX=/project2/.../other-env sbatch carc/jobs/full_bench.sh
+#
+# (sbatch passes your shell's environment variables to the job by default.)
+
+#SBATCH --job-name=int4-full
+#SBATCH --account=prasanna_933
+#SBATCH --partition=gpu
+#SBATCH --constraint=a100-80gb
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-task=a100:1    # one A100; the constraint picks the 80 GB variant
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=01:30:00
+#SBATCH --output=results/full_bench_%j.log
+
+# -e: stop at the first failure, so the benchmark never runs after a failing
+# test. pipefail: a failure inside a pipe counts. (No -u: see env_setup.sh.)
+set -eo pipefail
+
+cd "$SLURM_SUBMIT_DIR"
+export PYTHONUNBUFFERED=1   # print progress to the log as it happens
+
+# env_setup.sh defaults the CPU math libraries to 1 thread (for login nodes).
+# Here we own SLURM_CPUS_PER_TASK cores, so use them: the random weights are
+# generated on the CPU before being moved to the GPU.
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
+export MKL_NUM_THREADS="$OMP_NUM_THREADS"
+
+echo "=== job $SLURM_JOB_ID on $(hostname) at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+source carc/env_setup.sh
+
+echo
+echo "=== nvidia-smi ==="
+nvidia-smi
+
+echo
+echo "=== tests (GPU tests run here; they are skipped on machines without a GPU) ==="
+# -rs lists anything still skipped, so a GPU test that skipped unexpectedly is visible.
+python -m pytest tests -v -rs
+
+echo
+# Split the space-separated list into an array, so each name is passed to
+# --impls as its own argument.
+read -r -a IMPLS <<< "${INT4_IMPLS:-cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned cuda_kernel}"
+echo "=== FULL benchmark: ${IMPLS[*]} (scheme from config) ==="
+python run_benchmark.py --impls "${IMPLS[@]}"
+
+echo
+echo "=== done at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="

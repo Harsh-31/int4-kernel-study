@@ -193,7 +193,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 print(f"python            {sys.version.split()[0]}  ({sys.executable})")
 for pkg in ("torch", "triton", "vllm", "torchao", "cuda-toolkit",
-            "nvidia-cuda-nvcc", "pyyaml", "pytest"):
+            "nvidia-cuda-nvcc", "pyyaml", "pytest", "matplotlib"):
     try:
         print(f"{pkg:17s} {version(pkg)}")
     except PackageNotFoundError:
@@ -251,9 +251,10 @@ python -m pip freeze | grep -iE '^(torch|triton)==' > "$CONSTRAINTS"
 echo "[env] pinning versions chosen by vLLM:"
 cat "$CONSTRAINTS"
 
-# 3. The rest. pyyaml loads config/workloads.yaml; pytest runs tests/.
+# 3. The rest. pyyaml loads config/workloads.yaml; pytest runs tests/;
+#    matplotlib draws the report figures (analysis/plots.py).
 #    (No bitblas: excluded, see the CUDA toolkit note at the top.)
-python -m pip install -c "$CONSTRAINTS" triton torchao pyyaml pytest
+python -m pip install -c "$CONSTRAINTS" triton torchao pyyaml pytest matplotlib
 
 # 4. CUDA compiler matching PyTorch. Read the exact cuda-toolkit version torch
 #    depends on (e.g. torch 2.11.0+cu130 requires cuda-toolkit==13.0.2) and
