@@ -1,0 +1,419 @@
+=== job 14480484 on b04-13.hpc.usc.edu at 2026-11-24 06:36:56 UTC ===
+[env] which python:   /project2/prasanna_933/hsharma9/int4-env/bin/python
+[env] python version: Python 3.11.18
+[env] sys.prefix:     /project2/prasanna_933/hsharma9/int4-env
+[env] activated /project2/prasanna_933/hsharma9/int4-env
+[env] CUDA_HOME=/project2/prasanna_933/hsharma9/int4-env/lib/python3.11/site-packages/nvidia/cu13 (release 13.0)
+[env] threads: OPENBLAS=4 OMP=4 MKL=4
+[env] PIP_CACHE_DIR=/scratch1/hsharma9/ee451/pip_cache CONDA_PKGS_DIRS=/scratch1/hsharma9/cache/conda_pkgs HF_HOME=/scratch1/hsharma9/ee451/hf_cache
+
+=== nvidia-smi ===
+Mon Nov 23 22:37:07 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.04             Driver Version: 580.159.04     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          On  |   00000000:21:00.0 Off |                    0 |
+| N/A   29C    P0             43W /  300W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+
+=== tests (GPU tests run here; they are skipped on machines without a GPU) ===
+============================= test session starts ==============================
+platform linux -- Python 3.11.18, pytest-9.2.0, pluggy-1.7.0 -- /project2/prasanna_933/hsharma9/int4-env/bin/python
+cachedir: .pytest_cache
+rootdir: /home1/hsharma9/int4-kernel-study
+plugins: anyio-4.16.0, xdist-3.8.0
+collecting ... collected 263 items / 1 skipped
+
+tests/test_correctness.py::test_cublas_baseline_passes_against_itself[asymmetric-dtype0] PASSED [  0%]
+tests/test_correctness.py::test_cublas_baseline_passes_against_itself[asymmetric-dtype1] PASSED [  0%]
+tests/test_correctness.py::test_cublas_baseline_passes_against_itself[symmetric-dtype0] PASSED [  1%]
+tests/test_correctness.py::test_cublas_baseline_passes_against_itself[symmetric-dtype1] PASSED [  1%]
+tests/test_correctness.py::test_exact_reference_passes[asymmetric-dtype0] PASSED [  1%]
+tests/test_correctness.py::test_exact_reference_passes[asymmetric-dtype1] PASSED [  2%]
+tests/test_correctness.py::test_exact_reference_passes[symmetric-dtype0] PASSED [  2%]
+tests/test_correctness.py::test_exact_reference_passes[symmetric-dtype1] PASSED [  3%]
+tests/test_correctness.py::test_wrong_output_fails[asymmetric-dtype0] PASSED [  3%]
+tests/test_correctness.py::test_wrong_output_fails[asymmetric-dtype1] PASSED [  3%]
+tests/test_correctness.py::test_wrong_output_fails[symmetric-dtype0] PASSED [  4%]
+tests/test_correctness.py::test_wrong_output_fails[symmetric-dtype1] PASSED [  4%]
+tests/test_correctness.py::test_wrong_weights_fail[asymmetric-dtype0] PASSED [  4%]
+tests/test_correctness.py::test_wrong_weights_fail[asymmetric-dtype1] PASSED [  5%]
+tests/test_correctness.py::test_wrong_weights_fail[symmetric-dtype0] PASSED [  5%]
+tests/test_correctness.py::test_wrong_weights_fail[symmetric-dtype1] PASSED [  6%]
+tests/test_correctness.py::test_bf16_result_fails_the_fp16_rule[asymmetric] PASSED [  6%]
+tests/test_correctness.py::test_bf16_result_fails_the_fp16_rule[symmetric] PASSED [  6%]
+tests/test_correctness.py::test_unknown_compute_dtype_raises[asymmetric] PASSED [  7%]
+tests/test_correctness.py::test_unknown_compute_dtype_raises[symmetric] PASSED [  7%]
+tests/test_cublas.py::test_baseline_correct_small[asymmetric-cpu-fp16] PASSED [  7%]
+tests/test_cublas.py::test_baseline_correct_small[asymmetric-cpu-bf16] PASSED [  8%]
+tests/test_cublas.py::test_baseline_correct_small[asymmetric-cuda-fp16] PASSED [  8%]
+tests/test_cublas.py::test_baseline_correct_small[asymmetric-cuda-bf16] PASSED [  9%]
+tests/test_cublas.py::test_baseline_correct_small[symmetric-cpu-fp16] PASSED [  9%]
+tests/test_cublas.py::test_baseline_correct_small[symmetric-cpu-bf16] PASSED [  9%]
+tests/test_cublas.py::test_baseline_correct_small[symmetric-cuda-fp16] PASSED [ 10%]
+tests/test_cublas.py::test_baseline_correct_small[symmetric-cuda-bf16] PASSED [ 10%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_qkv-asymmetric-fp16] PASSED [ 11%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_qkv-asymmetric-bf16] PASSED [ 11%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_qkv-symmetric-fp16] PASSED [ 11%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_qkv-symmetric-bf16] PASSED [ 12%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_out-asymmetric-fp16] PASSED [ 12%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_out-asymmetric-bf16] PASSED [ 12%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_out-symmetric-fp16] PASSED [ 13%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[attn_out-symmetric-bf16] PASSED [ 13%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_up-asymmetric-fp16] PASSED [ 14%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_up-asymmetric-bf16] PASSED [ 14%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_up-symmetric-fp16] PASSED [ 14%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_up-symmetric-bf16] PASSED [ 15%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_down-asymmetric-fp16] PASSED [ 15%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_down-asymmetric-bf16] PASSED [ 15%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_down-symmetric-fp16] PASSED [ 16%]
+tests/test_cublas.py::test_baseline_correct_real_shapes[mlp_down-symmetric-bf16] PASSED [ 16%]
+tests/test_cublas.py::test_baselines_declare_dtypes_and_weight_bits PASSED [ 17%]
+tests/test_cublas.py::test_reference_weights_are_what_run_uses[fp16] PASSED [ 17%]
+tests/test_cublas.py::test_reference_weights_are_what_run_uses[bf16] PASSED [ 17%]
+tests/test_cuda_kernel.py::test_pack_unpack_round_trip PASSED            [ 18%]
+tests/test_cuda_kernel.py::test_bit_layout_matches_the_kernel PASSED     [ 18%]
+tests/test_cuda_kernel.py::test_packed_weights_decode_exactly[attn_qkv] PASSED [ 19%]
+tests/test_cuda_kernel.py::test_packed_weights_decode_exactly[attn_out] PASSED [ 19%]
+tests/test_cuda_kernel.py::test_packed_weights_decode_exactly[mlp_up] PASSED [ 19%]
+tests/test_cuda_kernel.py::test_packed_weights_decode_exactly[mlp_down] PASSED [ 20%]
+tests/test_cuda_kernel.py::test_cuda_kernel_passes_correctness[attn_qkv] PASSED [ 20%]
+tests/test_cuda_kernel.py::test_cuda_kernel_passes_correctness[attn_out] PASSED [ 20%]
+tests/test_cuda_kernel.py::test_cuda_kernel_passes_correctness[mlp_up] PASSED [ 21%]
+tests/test_cuda_kernel.py::test_cuda_kernel_passes_correctness[mlp_down] PASSED [ 21%]
+tests/test_cuda_kernel.py::test_every_group_size[32] PASSED              [ 22%]
+tests/test_cuda_kernel.py::test_every_group_size[64] PASSED              [ 22%]
+tests/test_cuda_kernel.py::test_every_group_size[128] PASSED             [ 22%]
+tests/test_cuda_kernel.py::test_batch_sizes_that_do_not_fill_a_row_tile PASSED [ 23%]
+tests/test_cuda_kernel.py::test_asymmetric_is_refused PASSED             [ 23%]
+tests/test_harness.py::test_bytes_int4_asymmetric PASSED                 [ 23%]
+tests/test_harness.py::test_bytes_int4_symmetric_has_no_zeros PASSED     [ 24%]
+tests/test_harness.py::test_bytes_fp16_ignores_group_size_and_is_about_4x PASSED [ 24%]
+tests/test_harness.py::test_bad_weight_bits_raises PASSED                [ 25%]
+tests/test_harness.py::test_bandwidth_units PASSED                       [ 25%]
+tests/test_harness.py::test_median_ignores_outliers PASSED               [ 25%]
+tests/test_harness.py::test_append_row_writes_header_once PASSED         [ 26%]
+tests/test_harness.py::test_default_csv_path_is_filesystem_safe PASSED   [ 26%]
+tests/test_harness.py::test_discover_impls_puts_baselines_first_in_order PASSED [ 26%]
+tests/test_harness.py::test_compute_dtype_and_prepare_input_defaults PASSED [ 27%]
+tests/test_harness.py::test_sweep_end_to_end PASSED                      [ 27%]
+tests/test_harness.py::test_excluded_impls_are_never_discovered_or_imported PASSED [ 28%]
+tests/test_harness.py::test_run_benchmark_refuses_excluded_impls PASSED  [ 28%]
+tests/test_harness.py::test_flush_reads_but_never_writes_the_buffer PASSED [ 28%]
+tests/test_marlin.py::test_scheme_selects_marlin_type[asymmetric] PASSED [ 29%]
+tests/test_marlin.py::test_scheme_selects_marlin_type[symmetric] PASSED  [ 29%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-32-asymmetric] PASSED [ 30%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-32-symmetric] PASSED [ 30%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-64-asymmetric] PASSED [ 30%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-64-symmetric] PASSED [ 31%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-128-asymmetric] PASSED [ 31%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_qkv-128-symmetric] PASSED [ 31%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-32-asymmetric] PASSED [ 32%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-32-symmetric] PASSED [ 32%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-64-asymmetric] PASSED [ 33%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-64-symmetric] PASSED [ 33%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-128-asymmetric] PASSED [ 33%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[attn_out-128-symmetric] PASSED [ 34%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-32-asymmetric] PASSED [ 34%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-32-symmetric] PASSED [ 34%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-64-asymmetric] PASSED [ 35%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-64-symmetric] PASSED [ 35%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-128-asymmetric] PASSED [ 36%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_up-128-symmetric] PASSED [ 36%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-32-asymmetric] PASSED [ 36%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-32-symmetric] PASSED [ 37%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-64-asymmetric] PASSED [ 37%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-64-symmetric] PASSED [ 38%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-128-asymmetric] PASSED [ 38%]
+tests/test_marlin.py::test_packed_weights_decode_exactly[mlp_down-128-symmetric] PASSED [ 38%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-32-asymmetric] PASSED [ 39%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-32-symmetric] PASSED [ 39%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-64-asymmetric] PASSED [ 39%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-64-symmetric] PASSED [ 40%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-128-asymmetric] PASSED [ 40%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_qkv-128-symmetric] PASSED [ 41%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-32-asymmetric] PASSED [ 41%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-32-symmetric] PASSED [ 41%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-64-asymmetric] PASSED [ 42%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-64-symmetric] PASSED [ 42%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-128-asymmetric] PASSED [ 42%]
+tests/test_marlin.py::test_marlin_passes_correctness[attn_out-128-symmetric] PASSED [ 43%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-32-asymmetric] PASSED [ 43%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-32-symmetric] PASSED [ 44%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-64-asymmetric] PASSED [ 44%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-64-symmetric] PASSED [ 44%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-128-asymmetric] PASSED [ 45%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_up-128-symmetric] PASSED [ 45%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-32-asymmetric] PASSED [ 46%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-32-symmetric] PASSED [ 46%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-64-asymmetric] PASSED [ 46%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-64-symmetric] PASSED [ 47%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-128-asymmetric] PASSED [ 47%]
+tests/test_marlin.py::test_marlin_passes_correctness[mlp_down-128-symmetric] PASSED [ 47%]
+tests/test_marlin.py::test_unsupported_shape_is_skipped_not_crashed PASSED [ 48%]
+tests/test_quantize.py::test_shapes_and_dtypes[32-asymmetric] PASSED     [ 48%]
+tests/test_quantize.py::test_shapes_and_dtypes[32-symmetric] PASSED      [ 49%]
+tests/test_quantize.py::test_shapes_and_dtypes[64-asymmetric] PASSED     [ 49%]
+tests/test_quantize.py::test_shapes_and_dtypes[64-symmetric] PASSED      [ 49%]
+tests/test_quantize.py::test_shapes_and_dtypes[128-asymmetric] PASSED    [ 50%]
+tests/test_quantize.py::test_shapes_and_dtypes[128-symmetric] PASSED     [ 50%]
+tests/test_quantize.py::test_round_trip_within_half_step[32-asymmetric] PASSED [ 50%]
+tests/test_quantize.py::test_round_trip_within_half_step[32-symmetric] PASSED [ 51%]
+tests/test_quantize.py::test_round_trip_within_half_step[64-asymmetric] PASSED [ 51%]
+tests/test_quantize.py::test_round_trip_within_half_step[64-symmetric] PASSED [ 52%]
+tests/test_quantize.py::test_round_trip_within_half_step[128-asymmetric] PASSED [ 52%]
+tests/test_quantize.py::test_round_trip_within_half_step[128-symmetric] PASSED [ 52%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[32-asymmetric] PASSED [ 53%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[32-symmetric] PASSED [ 53%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[64-asymmetric] PASSED [ 53%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[64-symmetric] PASSED [ 54%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[128-asymmetric] PASSED [ 54%]
+tests/test_quantize.py::test_round_trip_relative_error_is_small[128-symmetric] PASSED [ 55%]
+tests/test_quantize.py::test_dequantize_matches_formula[32-asymmetric] PASSED [ 55%]
+tests/test_quantize.py::test_dequantize_matches_formula[32-symmetric] PASSED [ 55%]
+tests/test_quantize.py::test_dequantize_matches_formula[64-asymmetric] PASSED [ 56%]
+tests/test_quantize.py::test_dequantize_matches_formula[64-symmetric] PASSED [ 56%]
+tests/test_quantize.py::test_dequantize_matches_formula[128-asymmetric] PASSED [ 57%]
+tests/test_quantize.py::test_dequantize_matches_formula[128-symmetric] PASSED [ 57%]
+tests/test_quantize.py::test_zero_is_exact_and_constant_groups_are_handled[asymmetric] PASSED [ 57%]
+tests/test_quantize.py::test_zero_is_exact_and_constant_groups_are_handled[symmetric] PASSED [ 58%]
+tests/test_quantize.py::test_standalone_dequantize_matches_method[asymmetric] PASSED [ 58%]
+tests/test_quantize.py::test_standalone_dequantize_matches_method[symmetric] PASSED [ 58%]
+tests/test_quantize.py::test_bad_group_size_raises[asymmetric] PASSED    [ 59%]
+tests/test_quantize.py::test_bad_group_size_raises[symmetric] PASSED     [ 59%]
+tests/test_quantize.py::test_symmetric_zero_point_is_fixed[32] PASSED    [ 60%]
+tests/test_quantize.py::test_symmetric_zero_point_is_fixed[64] PASSED    [ 60%]
+tests/test_quantize.py::test_symmetric_zero_point_is_fixed[128] PASSED   [ 60%]
+tests/test_quantize.py::test_symmetric_scale_is_max_abs_over_7_5_rounded_up[32] PASSED [ 61%]
+tests/test_quantize.py::test_symmetric_scale_is_max_abs_over_7_5_rounded_up[64] PASSED [ 61%]
+tests/test_quantize.py::test_symmetric_scale_is_max_abs_over_7_5_rounded_up[128] PASSED [ 61%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[32-asymmetric] PASSED [ 62%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[32-symmetric] PASSED [ 62%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[64-asymmetric] PASSED [ 63%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[64-symmetric] PASSED [ 63%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[128-asymmetric] PASSED [ 63%]
+tests/test_quantize.py::test_scales_exact_in_bf16_and_fp16[128-symmetric] PASSED [ 64%]
+tests/test_quantize.py::test_round_scale_edge_cases PASSED               [ 64%]
+tests/test_quantize.py::test_symmetric_grid_ends PASSED                  [ 65%]
+tests/test_quantize.py::test_symmetric_and_asymmetric_differ PASSED      [ 65%]
+tests/test_quantize.py::test_seed_is_reproducible PASSED                 [ 65%]
+tests/test_quantize.py::test_unknown_scheme_raises PASSED                [ 66%]
+tests/test_quantize.py::test_default_scheme_comes_from_config PASSED     [ 66%]
+tests/test_quantize.py::test_unset_config_scheme_raises PASSED           [ 66%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[attn_qkv-asymmetric] PASSED [ 67%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[attn_qkv-symmetric] PASSED [ 67%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[attn_out-asymmetric] PASSED [ 68%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[attn_out-symmetric] PASSED [ 68%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[mlp_up-asymmetric] PASSED [ 68%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[mlp_up-symmetric] PASSED [ 69%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[mlp_down-asymmetric] PASSED [ 69%]
+tests/test_quantize.py::test_round_trip_real_layer_shapes[mlp_down-symmetric] PASSED [ 69%]
+tests/test_torchao.py::test_declares_bf16_compute PASSED                 [ 70%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-32-asymmetric] PASSED [ 70%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-32-symmetric] PASSED [ 71%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-64-asymmetric] PASSED [ 71%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-64-symmetric] PASSED [ 71%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-128-asymmetric] PASSED [ 72%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_qkv-128-symmetric] PASSED [ 72%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-32-asymmetric] PASSED [ 73%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-32-symmetric] PASSED [ 73%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-64-asymmetric] PASSED [ 73%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-64-symmetric] PASSED [ 74%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-128-asymmetric] PASSED [ 74%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[attn_out-128-symmetric] PASSED [ 74%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-32-asymmetric] PASSED [ 75%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-32-symmetric] PASSED [ 75%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-64-asymmetric] PASSED [ 76%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-64-symmetric] PASSED [ 76%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-128-asymmetric] PASSED [ 76%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_up-128-symmetric] PASSED [ 77%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-32-asymmetric] PASSED [ 77%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-32-symmetric] PASSED [ 77%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-64-asymmetric] PASSED [ 78%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-64-symmetric] PASSED [ 78%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-128-asymmetric] PASSED [ 79%]
+tests/test_torchao.py::test_packed_weights_decode_exactly[mlp_down-128-symmetric] PASSED [ 79%]
+tests/test_torchao.py::test_symmetric_zero_is_exactly_zero PASSED        [ 79%]
+tests/test_torchao.py::test_torchao_passes_correctness[attn_qkv-asymmetric] PASSED [ 80%]
+tests/test_torchao.py::test_torchao_passes_correctness[attn_qkv-symmetric] PASSED [ 80%]
+tests/test_torchao.py::test_torchao_passes_correctness[attn_out-asymmetric] PASSED [ 80%]
+tests/test_torchao.py::test_torchao_passes_correctness[attn_out-symmetric] PASSED [ 81%]
+tests/test_torchao.py::test_torchao_passes_correctness[mlp_up-asymmetric] PASSED [ 81%]
+tests/test_torchao.py::test_torchao_passes_correctness[mlp_up-symmetric] PASSED [ 82%]
+tests/test_torchao.py::test_torchao_passes_correctness[mlp_down-asymmetric] PASSED [ 82%]
+tests/test_torchao.py::test_torchao_passes_correctness[mlp_down-symmetric] PASSED [ 82%]
+tests/test_torchao.py::test_direct_call_matches_torchao_linear[attn_qkv] PASSED [ 83%]
+tests/test_torchao.py::test_direct_call_matches_torchao_linear[attn_out] PASSED [ 83%]
+tests/test_torchao.py::test_direct_call_matches_torchao_linear[mlp_up] PASSED [ 84%]
+tests/test_torchao.py::test_direct_call_matches_torchao_linear[mlp_down] PASSED [ 84%]
+tests/test_torchao.py::test_unsupported_shape_is_skipped_not_crashed PASSED [ 84%]
+tests/test_triton_kernel.py::test_declares_fp16_compute PASSED           [ 85%]
+tests/test_triton_kernel.py::test_packed_weights_decode_exactly[attn_qkv] PASSED [ 85%]
+tests/test_triton_kernel.py::test_packed_weights_decode_exactly[attn_out] PASSED [ 85%]
+tests/test_triton_kernel.py::test_packed_weights_decode_exactly[mlp_up] PASSED [ 86%]
+tests/test_triton_kernel.py::test_packed_weights_decode_exactly[mlp_down] PASSED [ 86%]
+tests/test_triton_kernel.py::test_triton_kernel_passes_correctness[attn_qkv] PASSED [ 87%]
+tests/test_triton_kernel.py::test_triton_kernel_passes_correctness[attn_out] PASSED [ 87%]
+tests/test_triton_kernel.py::test_triton_kernel_passes_correctness[mlp_up] PASSED [ 87%]
+tests/test_triton_kernel.py::test_triton_kernel_passes_correctness[mlp_down] PASSED [ 88%]
+tests/test_triton_kernel.py::test_asymmetric_is_refused PASSED           [ 88%]
+tests/test_triton_kernel_v2.py::test_declares_fp16_compute PASSED        [ 88%]
+tests/test_triton_kernel_v2.py::test_packed_weights_match_v1_and_decode_exactly[attn_qkv] PASSED [ 89%]
+tests/test_triton_kernel_v2.py::test_packed_weights_match_v1_and_decode_exactly[attn_out] PASSED [ 89%]
+tests/test_triton_kernel_v2.py::test_packed_weights_match_v1_and_decode_exactly[mlp_up] PASSED [ 90%]
+tests/test_triton_kernel_v2.py::test_packed_weights_match_v1_and_decode_exactly[mlp_down] PASSED [ 90%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_qkv-1] PASSED [ 90%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_qkv-2] PASSED [ 91%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_qkv-8] PASSED [ 91%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_qkv-None] PASSED [ 92%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_out-1] PASSED [ 92%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_out-2] PASSED [ 92%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_out-8] PASSED [ 93%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[attn_out-None] PASSED [ 93%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_up-1] PASSED [ 93%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_up-2] PASSED [ 94%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_up-8] PASSED [ 94%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_up-None] PASSED [ 95%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_down-1] PASSED [ 95%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_down-2] PASSED [ 95%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_down-8] PASSED [ 96%]
+tests/test_triton_kernel_v2.py::test_triton_v2_passes_correctness[mlp_down-None] PASSED [ 96%]
+tests/test_triton_kernel_v2.py::test_overrides_stay_correct_and_expose_the_compiled_kernel PASSED [ 96%]
+tests/test_triton_kernel_v2.py::test_auto_split_fills_the_gpu PASSED     [ 97%]
+tests/test_triton_kernel_v2.py::test_asymmetric_is_refused PASSED        [ 97%]
+tests/test_triton_kernel_v2_tuned.py::test_declares_fp16_compute PASSED  [ 98%]
+tests/test_triton_kernel_v2_tuned.py::test_tuned_passes_correctness[attn_qkv] PASSED [ 98%]
+tests/test_triton_kernel_v2_tuned.py::test_tuned_passes_correctness[attn_out] PASSED [ 98%]
+tests/test_triton_kernel_v2_tuned.py::test_tuned_passes_correctness[mlp_up] PASSED [ 99%]
+tests/test_triton_kernel_v2_tuned.py::test_tuned_passes_correctness[mlp_down] PASSED [ 99%]
+tests/test_triton_kernel_v2_tuned.py::test_tuned_does_not_disturb_v2 PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../project2/prasanna_933/hsharma9/int4-env/lib/python3.11/site-packages/torch/jit/_script.py:365: 14 warnings
+  /project2/prasanna_933/hsharma9/int4-env/lib/python3.11/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_bitblas.py:28: excluded: requires CUDA 12
+=========== 263 passed, 1 skipped, 14 warnings in 137.53s (0:02:17) ============
+
+=== early benchmark: cublas cublas_bf16 marlin torchao triton_kernel triton_kernel_v2 triton_kernel_v2_tuned cuda_kernel (scheme from config) ===
+[harness] skipping impls/bitblas: excluded: requires CUDA 12
+WARNING 11-23 22:39:34 [config.py:70] Support for Transformers v4 is deprecated. The Transformers v4 codepath will become unmaintained in vLLM v0.22.0 and will be removed in vLLM v0.24.0. Please upgrade to Transformers v5: pip install --upgrade transformers
+[bench] GPU: NVIDIA A100 80GB PCIe
+[bench] measured peak bandwidth: 1668 GB/s (1.67 TB/s), from a 1024 MB device-to-device copy counted as 2048 MB moved (read + write)
+[bench] sweep=early scheme=symmetric impls=['cublas', 'cublas_bf16', 'cuda_kernel', 'marlin', 'torchao', 'triton_kernel', 'triton_kernel_v2', 'triton_kernel_v2_tuned']
+[bench] writing /home1/hsharma9/int4-kernel-study/results/nvidia-a100-80gb-pcie_2026-11-24T063936+0000.csv
+[bench] cublas       attn_qkv  M=1    G=128      41.98 us   1199.3 GB/s  71.9% peak speedup fp16 1.0 bf16 
+[bench] cublas       attn_qkv  M=16   G=128      43.01 us   1177.9 GB/s  70.6% peak speedup fp16 1.0 bf16 
+[bench] cublas       attn_qkv  M=64   G=128      37.89 us   1363.0 GB/s  81.7% peak speedup fp16 1.0 bf16 
+[bench] cublas_bf16  attn_qkv  M=1    G=128      41.98 us   1199.3 GB/s  71.9% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  attn_qkv  M=16   G=128      43.01 us   1177.9 GB/s  70.6% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  attn_qkv  M=64   G=128      36.86 us   1400.9 GB/s  84.0% peak speedup fp16 1.028 bf16 1.0
+[bench] cuda_kernel  attn_qkv  M=1    G=128      24.58 us    528.8 GB/s  31.7% peak speedup fp16 1.708 bf16 1.708
+[bench] cuda_kernel  attn_qkv  M=16   G=128     203.78 us     65.3 GB/s   3.9% peak speedup fp16 0.211 bf16 0.211
+[bench] cuda_kernel  attn_qkv  M=64   G=128     754.69 us     18.9 GB/s   1.1% peak speedup fp16 0.05 bf16 0.049
+[bench] marlin       attn_qkv  M=1    G=128      18.43 us    705.1 GB/s  42.3% peak speedup fp16 2.278 bf16 2.278
+[bench] marlin       attn_qkv  M=16   G=128      20.48 us    649.6 GB/s  38.9% peak speedup fp16 2.1 bf16 2.1
+[bench] marlin       attn_qkv  M=64   G=128      41.98 us    340.3 GB/s  20.4% peak speedup fp16 0.902 bf16 0.878
+[bench] torchao      attn_qkv  M=1    G=128      19.46 us    668.0 GB/s  40.0% peak speedup fp16 2.158 bf16 2.158
+[bench] torchao      attn_qkv  M=16   G=128      58.37 us    227.9 GB/s  13.7% peak speedup fp16 0.737 bf16 0.737
+[bench] torchao      attn_qkv  M=64   G=128     184.32 us     77.5 GB/s   4.6% peak speedup fp16 0.206 bf16 0.2
+[bench] triton_kernel attn_qkv  M=1    G=128      87.04 us    149.3 GB/s   8.9% peak speedup fp16 0.482 bf16 0.482
+[bench] triton_kernel attn_qkv  M=16   G=128     109.57 us    121.4 GB/s   7.3% peak speedup fp16 0.393 bf16 0.393
+[bench] triton_kernel attn_qkv  M=64   G=128     311.30 us     45.9 GB/s   2.8% peak speedup fp16 0.122 bf16 0.118
+[bench] triton_kernel_v2 attn_qkv  M=1    G=128      40.96 us    317.3 GB/s  19.0% peak speedup fp16 1.025 bf16 1.025
+[bench] triton_kernel_v2 attn_qkv  M=16   G=128      64.51 us    206.2 GB/s  12.4% peak speedup fp16 0.667 bf16 0.667
+[bench] triton_kernel_v2 attn_qkv  M=64   G=128     264.19 us     54.1 GB/s   3.2% peak speedup fp16 0.143 bf16 0.14
+[bench] triton_kernel_v2_tuned attn_qkv  M=1    G=128      36.86 us    352.6 GB/s  21.1% peak speedup fp16 1.139 bf16 1.139
+[bench] triton_kernel_v2_tuned attn_qkv  M=16   G=128      51.20 us    259.8 GB/s  15.6% peak speedup fp16 0.84 bf16 0.84
+[bench] triton_kernel_v2_tuned attn_qkv  M=64   G=128     138.24 us    103.3 GB/s   6.2% peak speedup fp16 0.274 bf16 0.267
+[bench] cublas       attn_out  M=1    G=128      26.62 us   1260.9 GB/s  75.6% peak speedup fp16 1.0 bf16 
+[bench] cublas       attn_out  M=16   G=128      26.62 us   1270.2 GB/s  76.1% peak speedup fp16 1.0 bf16 
+[bench] cublas       attn_out  M=64   G=128      27.65 us   1251.6 GB/s  75.0% peak speedup fp16 1.0 bf16 
+[bench] cublas_bf16  attn_out  M=1    G=128      26.62 us   1260.9 GB/s  75.6% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  attn_out  M=16   G=128      26.62 us   1270.2 GB/s  76.1% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  attn_out  M=64   G=128      26.62 us   1299.7 GB/s  77.9% peak speedup fp16 1.038 bf16 1.0
+[bench] cuda_kernel  attn_out  M=1    G=128      17.41 us    497.9 GB/s  29.8% peak speedup fp16 1.529 bf16 1.529
+[bench] cuda_kernel  attn_out  M=16   G=128     144.38 us     61.7 GB/s   3.7% peak speedup fp16 0.184 bf16 0.184
+[bench] cuda_kernel  attn_out  M=64   G=128     517.12 us     18.8 GB/s   1.1% peak speedup fp16 0.053 bf16 0.051
+[bench] marlin       attn_out  M=1    G=128      17.41 us    497.9 GB/s  29.8% peak speedup fp16 1.529 bf16 1.529
+[bench] marlin       attn_out  M=16   G=128      19.46 us    458.1 GB/s  27.5% peak speedup fp16 1.368 bf16 1.368
+[bench] marlin       attn_out  M=64   G=128      34.82 us    278.6 GB/s  16.7% peak speedup fp16 0.794 bf16 0.765
+[bench] torchao      attn_out  M=1    G=128      16.38 us    529.0 GB/s  31.7% peak speedup fp16 1.625 bf16 1.625
+[bench] torchao      attn_out  M=16   G=128      44.03 us    202.4 GB/s  12.1% peak speedup fp16 0.605 bf16 0.605
+[bench] torchao      attn_out  M=64   G=128     129.02 us     75.2 GB/s   4.5% peak speedup fp16 0.214 bf16 0.206
+[bench] triton_kernel attn_out  M=1    G=128      87.04 us     99.6 GB/s   6.0% peak speedup fp16 0.306 bf16 0.306
+[bench] triton_kernel attn_out  M=16   G=128     108.54 us     82.1 GB/s   4.9% peak speedup fp16 0.245 bf16 0.245
+[bench] triton_kernel attn_out  M=64   G=128     310.27 us     31.3 GB/s   1.9% peak speedup fp16 0.089 bf16 0.086
+[bench] triton_kernel_v2 attn_out  M=1    G=128      30.72 us    282.1 GB/s  16.9% peak speedup fp16 0.867 bf16 0.867
+[bench] triton_kernel_v2 attn_out  M=16   G=128      44.03 us    202.4 GB/s  12.1% peak speedup fp16 0.605 bf16 0.605
+[bench] triton_kernel_v2 attn_out  M=64   G=128     177.15 us     54.8 GB/s   3.3% peak speedup fp16 0.156 bf16 0.15
+[bench] triton_kernel_v2_tuned attn_out  M=1    G=128      29.70 us    291.9 GB/s  17.5% peak speedup fp16 0.897 bf16 0.897
+[bench] triton_kernel_v2_tuned attn_out  M=16   G=128      41.98 us    212.3 GB/s  12.7% peak speedup fp16 0.634 bf16 0.634
+[bench] triton_kernel_v2_tuned attn_out  M=64   G=128     108.54 us     89.4 GB/s   5.4% peak speedup fp16 0.255 bf16 0.245
+[bench] cublas       mlp_up    M=1    G=128     157.70 us   1489.9 GB/s  89.3% peak speedup fp16 1.0 bf16 
+[bench] cublas       mlp_up    M=16   G=128     165.89 us   1422.2 GB/s  85.2% peak speedup fp16 1.0 bf16 
+[bench] cublas       mlp_up    M=64   G=128     168.96 us   1415.0 GB/s  84.8% peak speedup fp16 1.0 bf16 
+[bench] cublas_bf16  mlp_up    M=1    G=128     157.70 us   1489.9 GB/s  89.3% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  mlp_up    M=16   G=128     165.89 us   1422.2 GB/s  85.2% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  mlp_up    M=64   G=128     166.91 us   1432.3 GB/s  85.9% peak speedup fp16 1.012 bf16 1.0
+[bench] cuda_kernel  mlp_up    M=1    G=128      70.66 us    858.0 GB/s  51.4% peak speedup fp16 2.232 bf16 2.232
+[bench] cuda_kernel  mlp_up    M=16   G=128     868.35 us     70.9 GB/s   4.3% peak speedup fp16 0.191 bf16 0.191
+[bench] cuda_kernel  mlp_up    M=64   G=128    3396.61 us     19.1 GB/s   1.1% peak speedup fp16 0.05 bf16 0.049
+[bench] marlin       mlp_up    M=1    G=128      49.15 us   1233.3 GB/s  73.9% peak speedup fp16 3.208 bf16 3.208
+[bench] marlin       mlp_up    M=16   G=128      53.25 us   1156.9 GB/s  69.3% peak speedup fp16 3.115 bf16 3.115
+[bench] marlin       mlp_up    M=64   G=128      91.14 us    710.5 GB/s  42.6% peak speedup fp16 1.854 bf16 1.831
+[bench] torchao      mlp_up    M=1    G=128      57.34 us   1057.1 GB/s  63.4% peak speedup fp16 2.75 bf16 2.75
+[bench] torchao      mlp_up    M=16   G=128     214.02 us    287.8 GB/s  17.3% peak speedup fp16 0.775 bf16 0.775
+[bench] torchao      mlp_up    M=64   G=128     819.20 us     79.0 GB/s   4.7% peak speedup fp16 0.206 bf16 0.204
+[bench] triton_kernel mlp_up    M=1    G=128     134.14 us    451.9 GB/s  27.1% peak speedup fp16 1.176 bf16 1.176
+[bench] triton_kernel mlp_up    M=16   G=128     235.52 us    261.6 GB/s  15.7% peak speedup fp16 0.704 bf16 0.704
+[bench] triton_kernel mlp_up    M=64   G=128    1272.83 us     50.9 GB/s   3.0% peak speedup fp16 0.133 bf16 0.131
+[bench] triton_kernel_v2 mlp_up    M=1    G=128     139.26 us    435.3 GB/s  26.1% peak speedup fp16 1.132 bf16 1.132
+[bench] triton_kernel_v2 mlp_up    M=16   G=128     234.50 us    262.7 GB/s  15.7% peak speedup fp16 0.707 bf16 0.707
+[bench] triton_kernel_v2 mlp_up    M=64   G=128    1231.87 us     52.6 GB/s   3.2% peak speedup fp16 0.137 bf16 0.135
+[bench] triton_kernel_v2_tuned mlp_up    M=1    G=128     137.22 us    441.8 GB/s  26.5% peak speedup fp16 1.149 bf16 1.149
+[bench] triton_kernel_v2_tuned mlp_up    M=16   G=128     182.78 us    337.0 GB/s  20.2% peak speedup fp16 0.908 bf16 0.908
+[bench] triton_kernel_v2_tuned mlp_up    M=64   G=128     549.89 us    117.8 GB/s   7.1% peak speedup fp16 0.307 bf16 0.304
+[bench] cublas       mlp_down  M=1    G=128      83.97 us   1399.1 GB/s  83.9% peak speedup fp16 1.0 bf16 
+[bench] cublas       mlp_down  M=16   G=128      86.02 us   1372.2 GB/s  82.2% peak speedup fp16 1.0 bf16 
+[bench] cublas       mlp_down  M=64   G=128      86.02 us   1392.8 GB/s  83.5% peak speedup fp16 1.0 bf16 
+[bench] cublas_bf16  mlp_down  M=1    G=128      84.99 us   1382.2 GB/s  82.8% peak speedup fp16 0.988 bf16 1.0
+[bench] cublas_bf16  mlp_down  M=16   G=128      86.02 us   1372.2 GB/s  82.2% peak speedup fp16 1.0 bf16 1.0
+[bench] cublas_bf16  mlp_down  M=64   G=128      86.02 us   1392.8 GB/s  83.5% peak speedup fp16 1.0 bf16 1.0
+[bench] cuda_kernel  mlp_down  M=1    G=128      43.01 us    704.9 GB/s  42.2% peak speedup fp16 1.952 bf16 1.976
+[bench] cuda_kernel  mlp_down  M=16   G=128     489.47 us     63.1 GB/s   3.8% peak speedup fp16 0.176 bf16 0.176
+[bench] cuda_kernel  mlp_down  M=64   G=128    1816.58 us     18.0 GB/s   1.1% peak speedup fp16 0.047 bf16 0.047
+[bench] marlin       mlp_down  M=1    G=128      29.70 us   1020.8 GB/s  61.2% peak speedup fp16 2.828 bf16 2.862
+[bench] marlin       mlp_down  M=16   G=128      32.77 us    942.0 GB/s  56.5% peak speedup fp16 2.625 bf16 2.625
+[bench] marlin       mlp_down  M=64   G=128      70.66 us    461.9 GB/s  27.7% peak speedup fp16 1.217 bf16 1.217
+[bench] torchao      mlp_down  M=1    G=128      38.91 us    779.1 GB/s  46.7% peak speedup fp16 2.158 bf16 2.184
+[bench] torchao      mlp_down  M=16   G=128     124.93 us    247.1 GB/s  14.8% peak speedup fp16 0.689 bf16 0.689
+[bench] torchao      mlp_down  M=64   G=128     441.34 us     73.9 GB/s   4.4% peak speedup fp16 0.195 bf16 0.195
+[bench] triton_kernel mlp_down  M=1    G=128     288.77 us    105.0 GB/s   6.3% peak speedup fp16 0.291 bf16 0.294
+[bench] triton_kernel mlp_down  M=16   G=128     357.38 us     86.4 GB/s   5.2% peak speedup fp16 0.241 bf16 0.241
+[bench] triton_kernel mlp_down  M=64   G=128    1075.20 us     30.4 GB/s   1.8% peak speedup fp16 0.08 bf16 0.08
+[bench] triton_kernel_v2 mlp_down  M=1    G=128      75.78 us    400.1 GB/s  24.0% peak speedup fp16 1.108 bf16 1.122
+[bench] triton_kernel_v2 mlp_down  M=16   G=128     115.71 us    266.8 GB/s  16.0% peak speedup fp16 0.743 bf16 0.743
+[bench] triton_kernel_v2 mlp_down  M=64   G=128     563.20 us     57.9 GB/s   3.5% peak speedup fp16 0.153 bf16 0.153
+[bench] triton_kernel_v2_tuned mlp_down  M=1    G=128      68.61 us    441.9 GB/s  26.5% peak speedup fp16 1.224 bf16 1.239
+[bench] triton_kernel_v2_tuned mlp_down  M=16   G=128      98.30 us    314.0 GB/s  18.8% peak speedup fp16 0.875 bf16 0.875
+[bench] triton_kernel_v2_tuned mlp_down  M=64   G=128     331.78 us     98.4 GB/s   5.9% peak speedup fp16 0.259 bf16 0.259
+[bench] done: /home1/hsharma9/int4-kernel-study/results/nvidia-a100-80gb-pcie_2026-11-24T063936+0000.csv
+
+=== done at 2026-11-24 06:39:52 UTC ===
